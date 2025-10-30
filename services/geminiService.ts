@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { GeneratedRecipe, InventoryItem, PredictedNeed, ProductPrice, Substitute } from "../types";
+import { GeneratedRecipe, InventoryItem, ProductPrice, Substitute } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
@@ -67,78 +67,6 @@ export const generateRecipe = async (inventory: InventoryItem[]): Promise<Genera
   } catch (error) {
     console.error("Error generating recipe with Gemini:", error);
     throw new Error("No se pudo generar la receta. Inténtalo de nuevo.");
-  }
-};
-
-const predictionSchema = {
-  type: Type.ARRAY,
-  description: "Lista de ingredientes necesarios para la próxima semana.",
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      name: { type: Type.STRING, description: "Nombre del ingrediente." },
-      quantity: { type: Type.NUMBER, description: "Cantidad numérica necesaria." },
-      unit: { type: Type.STRING, description: "Unidad de medida (ej. kg, litros)." },
-      reason: { type: Type.STRING, description: "Breve justificación de por qué se necesita este ingrediente." }
-    },
-    required: ["name", "quantity", "unit", "reason"]
-  }
-};
-
-export const predictNeeds = async (inventory: InventoryItem[]): Promise<PredictedNeed[]> => {
-  const inventoryList = inventory.map(item => `${item.name}: ${item.quantity} ${item.unit}`).join(', ');
-  const prompt = `
-    Eres un analista de datos experto para una olla común peruana que alimenta a unas 150 personas diariamente.
-    El consumo semanal típico es alto en arroz, papas, pollo y lentejas.
-    Basado en el inventario actual: [${inventoryList}], predice los 5 ingredientes más críticos que se necesitarán en los próximos 7 días.
-    Considera un stock de seguridad y evita el desabastecimiento.
-    Responde ÚNICAMENTE con un objeto JSON que se ajuste estrictamente al esquema proporcionado.
-  `;
-  
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: predictionSchema,
-        temperature: 0.5,
-      },
-    });
-    
-    const text = response.text.trim();
-    const cleanedText = text.replace(/^```json\s*|```\s*$/g, '');
-    const parsedNeeds = JSON.parse(cleanedText) as PredictedNeed[];
-    return parsedNeeds;
-
-  } catch (error) {
-    console.error("Error predicting needs with Gemini:", error);
-    throw new Error("No se pudo predecir las necesidades. Inténtalo de nuevo.");
-  }
-};
-
-export const generateCampaignMessage = async (needs: PredictedNeed[]): Promise<string> => {
-  const needsList = needs.map(need => `${need.quantity} ${need.unit} de ${need.name}`).join(', ');
-  const prompt = `
-    Eres un comunicador social para una olla común peruana. Escribe un mensaje corto, inspirador y lleno de esperanza para redes sociales (WhatsApp/Facebook) pidiendo donaciones.
-    El tono debe ser de urgencia comunitaria y solidaridad, no de lástima.
-    Menciona específicamente que necesitamos con urgencia: ${needsList}.
-    Incluye un llamado a la acción claro y agradece de antemano.
-    El mensaje debe tener menos de 80 palabras y ser muy emotivo.
-    Responde únicamente con el texto del mensaje como una cadena de texto simple.
-  `;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-    });
-    
-    return response.text.trim();
-
-  } catch (error) {
-    console.error("Error generating campaign message with Gemini:", error);
-    throw new Error("No se pudo generar el mensaje de campaña.");
   }
 };
 

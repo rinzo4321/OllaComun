@@ -47,13 +47,6 @@ export interface Transaction {
   hash: string;
 }
 
-export interface PredictedNeed {
-  name: string;
-  quantity: number;
-  unit: string;
-  reason: string;
-}
-
 export interface IpcData {
   date: Date;
   variation: number; // Stored as decimal, e.g., 0.03 for 3%
