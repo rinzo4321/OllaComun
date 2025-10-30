@@ -155,7 +155,7 @@ const App: React.FC = () => {
       case 'blockchain':
         return <BlockchainLedger transactions={transactions} />;
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard transactions={transactions} ollas={ollas} />;
       case 'radar':
         return <PriceRadar priceData={priceData} ipcData={ipcData} />;
       default:
