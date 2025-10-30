@@ -1,0 +1,5 @@
+{
+  "name": "OllaComún 360",
+  "description": "An intelligent platform to support community kitchens ('ollas comunes') in Peru by generating nutritious, low-cost recipes, tracking food supplies, and simulating resource exchange to optimize food management and reduce waste.",
+  "requestFramePermissions": []
+}
