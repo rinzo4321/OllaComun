@@ -32,13 +32,16 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ollas }) => {
     const kpiMetrics = useMemo(() => {
         const totalDonationsKg = filteredTransactions
             .filter(tx => tx.type === 'Donación' && (tx.unit === 'kg' || tx.unit === 'kilogramo'))
-            .reduce((acc, tx) => acc + tx.quantity, 0);
+            .reduce((acc, tx) => {
+                const quantity = Number(tx.quantity) || 0;
+                return acc + quantity;
+            }, 0);
 
         const totalDonationsCount = filteredTransactions.filter(tx => tx.type === 'Donación').length;
         const totalExchanges = filteredTransactions.filter(tx => tx.type === 'Intercambio').length;
 
         return {
-            totalDonationsKg: totalDonationsKg.toFixed(2),
+            totalDonationsKg: Number(totalDonationsKg).toFixed(2),
             activeOllas: ollas.length,
             totalDonationsCount,
             totalExchanges,
@@ -49,13 +52,35 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ollas }) => {
         const charts: any[] = [];
         
         const destroyCharts = () => {
-            charts.forEach(chart => chart.destroy());
-            if (Chart.getChart(activityChartRef.current)) Chart.getChart(activityChartRef.current).destroy();
-            if (Chart.getChart(timelineChartRef.current)) Chart.getChart(timelineChartRef.current).destroy();
-            if (Chart.getChart(productsChartRef.current)) Chart.getChart(productsChartRef.current).destroy();
+            charts.forEach(chart => {
+                try {
+                    chart.destroy();
+                } catch (e) {
+                    // Chart already destroyed
+                }
+            });
+            try {
+                if (activityChartRef.current && Chart.getChart(activityChartRef.current)) {
+                    Chart.getChart(activityChartRef.current).destroy();
+                }
+                if (timelineChartRef.current && Chart.getChart(timelineChartRef.current)) {
+                    Chart.getChart(timelineChartRef.current).destroy();
+                }
+                if (productsChartRef.current && Chart.getChart(productsChartRef.current)) {
+                    Chart.getChart(productsChartRef.current).destroy();
+                }
+            } catch (e) {
+                // Chart not available yet
+            }
         };
 
         const createCharts = () => {
+            // Check if Chart.js is loaded
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js not loaded yet');
+                return;
+            }
+            
             destroyCharts();
 
             // Activity Chart (Doughnut)
@@ -138,7 +163,21 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ollas }) => {
             }
         };
         
-        const timeoutId = setTimeout(createCharts, 100);
+        // Wait for Chart.js to load, retry if needed
+        let timeoutId: NodeJS.Timeout;
+        let retryCount = 0;
+        const maxRetries = 10;
+        
+        const tryCreateCharts = () => {
+            if (typeof Chart === 'undefined' && retryCount < maxRetries) {
+                retryCount++;
+                timeoutId = setTimeout(tryCreateCharts, 200);
+            } else {
+                createCharts();
+            }
+        };
+        
+        timeoutId = setTimeout(tryCreateCharts, 100);
 
         return () => {
             clearTimeout(timeoutId);
@@ -147,10 +186,10 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ollas }) => {
     }, [filteredTransactions]);
 
     const metrics = [
-        { label: 'Total Donaciones (Kg)', value: kpiMetrics.totalDonationsKg, color: 'text-green-600' },
-        { label: 'Ollas Activas', value: kpiMetrics.activeOllas, color: 'text-orange-600' },
-        { label: 'Donaciones Registradas', value: kpiMetrics.totalDonationsCount, color: 'text-blue-600' },
-        { label: 'Intercambios Realizados', value: kpiMetrics.totalExchanges, color: 'text-purple-600' },
+        { label: 'Total Donaciones (Kg)', value: kpiMetrics.totalDonationsKg, color: 'text-[#f7931e]' },
+        { label: 'Ollas Activas', value: kpiMetrics.activeOllas, color: 'text-[#f7931e]' },
+        { label: 'Donaciones Registradas', value: kpiMetrics.totalDonationsCount, color: 'text-[#f7931e]' },
+        { label: 'Intercambios Realizados', value: kpiMetrics.totalExchanges, color: 'text-[#f7931e]' },
     ];
 
     return (

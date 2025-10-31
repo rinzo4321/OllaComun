@@ -6,6 +6,7 @@ import BlockchainLedger from './components/BlockchainLedger';
 import Dashboard from './components/Dashboard';
 import DonationManager from './components/DonationManager';
 import PriceRadar from './components/PriceRadar';
+import ErrorBoundary from './components/ErrorBoundary';
 import { WHOLESALE_PRICES_CSV, RETAIL_PRICES_CSV } from './data/prices';
 import { IPC_PRICES_CSV } from './data/ipc';
 import { INITIAL_OLLAS } from './constants';
@@ -164,12 +165,14 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#fff8ed] text-gray-800">
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} />
-      <main className="p-4 sm:p-6 md:p-8">
-        {renderContent()}
-      </main>
-    </div>
+    <ErrorBoundary>
+      <div className="min-h-screen bg-[#fff8ed] text-gray-800">
+        <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+        <main className="p-4 sm:p-6 md:p-8">
+          {renderContent()}
+        </main>
+      </div>
+    </ErrorBoundary>
   );
 };
 

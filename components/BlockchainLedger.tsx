@@ -30,7 +30,7 @@ const BlockchainLedger: React.FC<BlockchainLedgerProps> = ({ transactions }) => 
                             <tr key={tx.id} className="border-b hover:bg-gray-50">
                                 <td className="py-3 px-4">{tx.date}</td>
                                 <td className="py-3 px-4">
-                                    <span className={`px-2 py-1 text-xs rounded-full ${tx.type === 'Donación' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                                    <span className={`px-2 py-1 text-xs rounded-full ${tx.type === 'Donación' ? 'bg-[#fff8ed] text-[#f7931e] border border-[#f7931e]/30' : 'bg-[#fff8ed] text-[#f7931e] border border-[#f7931e]/30'}`}>
                                         {tx.type}
                                     </span>
                                 </td>

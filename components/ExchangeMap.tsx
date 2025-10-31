@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Card from './shared/Card';
 import { LIMA_CENTER } from '../constants';
 import { OllaLocation, ProductPrice } from '../types';
-import { PlusCircleIcon, TruckIcon } from './icons/Icons';
+import { Plus, Truck, MapPin, Navigation, X, TrendingUp, TrendingDown, Package } from 'lucide-react';
 import Spinner from './shared/Spinner';
 
 
@@ -98,6 +98,10 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
         // Short timeout to allow spinner to render before synchronous, blocking calculation
         setTimeout(() => {
             try {
+                if (typeof L === 'undefined') {
+                    throw new Error("Leaflet no está cargado aún. Por favor, espera un momento e intenta de nuevo.");
+                }
+                
                 if (ollas.length < 2) {
                     throw new Error("Se necesitan al menos dos ollas para calcular una ruta.");
                 }
@@ -137,21 +141,30 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
                 
                 // Locally generate the route description as an HTML string
                 let description = `
-                <p>Esta es la ruta más eficiente (usando el vecino más cercano) para visitar todas las ollas, comenzando desde <b>${startOlla.name}</b>.</p>
-                <h4 class="font-bold mt-4 mb-2">Orden de Visita:</h4>
-                <ol class="list-decimal list-inside space-y-2">`;
+                <p class="text-gray-700">Esta es la ruta más eficiente (usando el vecino más cercano) para visitar todas las ollas, comenzando desde <b style="color: #f7931e;">${startOlla.name}</b>.</p>
+                <h4 class="font-bold mt-4 mb-2 text-gray-900 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f7931e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg>
+                    Orden de Visita:
+                </h4>
+                <ol class="list-decimal list-inside space-y-3">`;
                 
                 route.forEach((olla) => {
-                    description += `<li class="font-semibold">${olla.name}`;
+                    description += `<li class="font-semibold text-gray-900">${olla.name}`;
                     let details: string[] = [];
                     if (olla.surplus.length > 0) {
-                        details.push(`<span class="font-normal text-gray-700">🟢 Recoger excedente de: ${olla.surplus.join(', ')}</span>`);
+                        details.push(`<div class="flex items-start gap-2 font-normal text-gray-700 p-2 rounded" style="background-color: #fff8ed; border: 1px solid rgba(247, 147, 30, 0.3);">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f7931e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 flex-shrink-0"><path d="m7 11 5-5 5 5"/><path d="M12 18V6"/></svg>
+                            <span>Recoger excedente de: <span class="font-medium">${olla.surplus.join(', ')}</span></span>
+                        </div>`);
                     }
                     if (olla.deficit.length > 0) {
-                        details.push(`<span class="font-normal text-gray-700">🔴 Cubrir déficit de: ${olla.deficit.join(', ')}</span>`);
+                        details.push(`<div class="flex items-start gap-2 font-normal text-gray-700 bg-red-50 p-2 rounded">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-600 mt-0.5 flex-shrink-0"><path d="M12 6v6"/><path d="m7 18 5 5 5-5"/></svg>
+                            <span>Cubrir déficit de: <span class="font-medium">${olla.deficit.join(', ')}</span></span>
+                        </div>`);
                     }
                     if (details.length > 0) {
-                        description += `<ul class="list-disc list-inside ml-4 mt-1">${details.map(d => `<li>${d}</li>`).join('')}</ul>`;
+                        description += `<div class="ml-6 mt-2 space-y-2">${details.join('')}</div>`;
                     }
                     description += `</li>`;
                 });
@@ -168,19 +181,33 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
     };
 
     useEffect(() => {
+        // Check if Leaflet is loaded
+        if (typeof L === 'undefined') {
+            console.warn('Leaflet not loaded yet');
+            return;
+        }
+        
         if (mapContainer.current && !mapInstance.current) {
-            mapInstance.current = L.map(mapContainer.current).setView(LIMA_CENTER, 11);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(mapInstance.current);
-            markersLayer.current = L.layerGroup().addTo(mapInstance.current);
-            routeLayer.current = L.layerGroup().addTo(mapInstance.current);
+            try {
+                mapInstance.current = L.map(mapContainer.current).setView(LIMA_CENTER, 11);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(mapInstance.current);
+                markersLayer.current = L.layerGroup().addTo(mapInstance.current);
+                routeLayer.current = L.layerGroup().addTo(mapInstance.current);
+            } catch (error) {
+                console.error('Error initializing map:', error);
+            }
         }
 
         return () => { // Cleanup
             if (mapInstance.current) {
-                mapInstance.current.remove();
-                mapInstance.current = null;
+                try {
+                    mapInstance.current.remove();
+                    mapInstance.current = null;
+                } catch (error) {
+                    console.error('Error cleaning up map:', error);
+                }
             }
         };
     }, []);
@@ -263,55 +290,153 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
     <Card>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 space-y-6">
-                 <div>
-                    <h2 className="text-2xl font-bold text-[#5fa25f] mb-2">Mapa de Intercambio</h2>
-                    <p className="text-gray-600">Añade ollas, planifica rutas y optimiza la distribución de recursos en tu comunidad.</p>
+                <div className="flex items-center gap-3">
+                    <div className="bg-gradient-to-br from-[#f7931e] to-[#ff9f3a] p-3 rounded-xl shadow-lg">
+                        <MapPin className="text-white" size={28} strokeWidth={2} />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900">Mapa de Intercambio</h2>
+                        <p className="text-sm text-gray-600">Optimiza la distribución de recursos</p>
+                    </div>
                 </div>
 
-                <div className="bg-gray-50 p-4 rounded-lg">
-                    <h3 className="font-bold text-lg mb-2">Añadir Nueva Olla</h3>
-                     <button onClick={() => setIsAddingMode(!isAddingMode)} className={`w-full text-white py-2 rounded-md font-semibold mb-3 ${isAddingMode ? 'bg-red-500 hover:bg-red-600' : 'bg-[#5fa25f] hover:bg-green-700'}`}>
-                       {isAddingMode ? 'Cancelar' : 'Activar Modo Añadir en Mapa'}
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-5 rounded-xl border border-gray-200 shadow-sm">
+                    <h3 className="font-bold text-lg mb-3 flex items-center gap-2 text-gray-900">
+                        <Plus size={20} className="text-[#f7931e]" />
+                        Añadir Nueva Olla
+                    </h3>
+                    <button 
+                        onClick={() => setIsAddingMode(!isAddingMode)} 
+                        className={`w-full text-white py-3 rounded-lg font-semibold mb-3 flex items-center justify-center gap-2 transition-all shadow ${isAddingMode ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700' : 'bg-gradient-to-r from-[#f7931e] to-[#ff9f3a] hover:shadow-lg'}`}
+                    >
+                        {isAddingMode ? (
+                            <>
+                                <X size={20} />
+                                Cancelar
+                            </>
+                        ) : (
+                            <>
+                                <MapPin size={20} />
+                                Activar Modo Añadir
+                            </>
+                        )}
                     </button>
                     {isAddingMode && (
                         <div className="space-y-3 animate-fade-in">
-                            <p className="text-sm text-blue-600 bg-blue-100 p-2 rounded-md">Haz clic en el mapa para fijar la ubicación.</p>
-                            <input type="text" name="name" value={newOllaForm.name} onChange={handleFormChange} placeholder="Nombre de la Olla" className="w-full p-2 border rounded-md" />
+                            <div className="flex items-center gap-2 text-sm text-[#f7931e] bg-[#fff8ed] p-3 rounded-lg border border-[#f7931e]/30">
+                                <Navigation size={16} className="flex-shrink-0" />
+                                <span>Haz clic en el mapa para fijar la ubicación</span>
+                            </div>
+                            <input 
+                                type="text" 
+                                name="name" 
+                                value={newOllaForm.name} 
+                                onChange={handleFormChange} 
+                                placeholder="Nombre de la olla comunitaria" 
+                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e]" 
+                            />
                             <div className="relative">
-                                <input type="text" name="surplus" value={newOllaForm.surplus} onChange={handleFormChange} placeholder="Excedentes (ej: papa, arroz)" className="w-full p-2 border rounded-md" autoComplete="off" />
+                                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-1">
+                                    <TrendingUp size={16} className="text-[#f7931e]" />
+                                    Excedentes
+                                </label>
+                                <input 
+                                    type="text" 
+                                    name="surplus" 
+                                    value={newOllaForm.surplus} 
+                                    onChange={handleFormChange} 
+                                    placeholder="Productos con excedente (separados por comas)" 
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e]" 
+                                    autoComplete="off" 
+                                />
                                 {activeSuggestionInput === 'surplus' && suggestions.length > 0 && (
-                                    <ul className="absolute z-10 w-full bg-white border rounded-md mt-1 shadow-lg max-h-48 overflow-y-auto">
+                                    <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 shadow-xl max-h-48 overflow-y-auto">
                                         {suggestions.map((s, i) => (
-                                            <li key={i} onClick={() => handleSuggestionClick('surplus', s.name)} className="p-2 hover:bg-gray-100 cursor-pointer capitalize">{s.name}</li>
+                                            <li 
+                                                key={i} 
+                                                onClick={() => handleSuggestionClick('surplus', s.name)} 
+                                                className="p-3 hover:bg-[#fff8ed] cursor-pointer capitalize flex items-center gap-2"
+                                            >
+                                                <Package size={16} className="text-[#f7931e]" />
+                                                {s.name}
+                                            </li>
                                         ))}
                                     </ul>
                                 )}
                             </div>
-                             <div className="relative">
-                                <input type="text" name="deficit" value={newOllaForm.deficit} onChange={handleFormChange} placeholder="Déficits (ej: pollo, aceite)" className="w-full p-2 border rounded-md" autoComplete="off" />
+                            <div className="relative">
+                                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-1">
+                                    <TrendingDown size={16} className="text-red-600" />
+                                    Déficits
+                                </label>
+                                <input 
+                                    type="text" 
+                                    name="deficit" 
+                                    value={newOllaForm.deficit} 
+                                    onChange={handleFormChange} 
+                                    placeholder="Productos que faltan (separados por comas)" 
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e]" 
+                                    autoComplete="off" 
+                                />
                                 {activeSuggestionInput === 'deficit' && suggestions.length > 0 && (
-                                    <ul className="absolute z-10 w-full bg-white border rounded-md mt-1 shadow-lg max-h-48 overflow-y-auto">
+                                    <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 shadow-xl max-h-48 overflow-y-auto">
                                         {suggestions.map((s, i) => (
-                                            <li key={i} onClick={() => handleSuggestionClick('deficit', s.name)} className="p-2 hover:bg-gray-100 cursor-pointer capitalize">{s.name}</li>
+                                            <li 
+                                                key={i} 
+                                                onClick={() => handleSuggestionClick('deficit', s.name)} 
+                                                className="p-3 hover:bg-[#fff8ed] cursor-pointer capitalize flex items-center gap-2"
+                                            >
+                                                <Package size={16} className="text-[#f7931e]" />
+                                                {s.name}
+                                            </li>
                                         ))}
                                     </ul>
                                 )}
                             </div>
-                            <button onClick={handleAddOlla} className="w-full bg-[#f4a949] text-white py-2 rounded-md font-semibold hover:bg-orange-500 flex items-center justify-center gap-2">
-                                <PlusCircleIcon className="w-5 h-5"/> Guardar Olla
+                            <button 
+                                onClick={handleAddOlla} 
+                                className="w-full bg-gradient-to-r from-[#f7931e] to-[#ff9f3a] text-white py-3 rounded-lg font-semibold hover:shadow-lg flex items-center justify-center gap-2 shadow transition-all"
+                            >
+                                <Plus size={20} />
+                                Guardar Olla
                             </button>
                         </div>
                     )}
                 </div>
 
-                <div className="bg-gray-50 p-4 rounded-lg">
-                     <h3 className="font-bold text-lg mb-2">Planificador de Ruta</h3>
-                     <select value={startOllaId} onChange={(e) => setStartOllaId(e.target.value)} className="w-full p-2 border rounded-md mb-3 bg-white" disabled={ollas.length === 0}>
-                         {ollas.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                     </select>
-                     <button onClick={calculateRoute} disabled={isCalculating || ollas.length < 2} className="w-full bg-[#5fa25f] text-white py-2 rounded-md font-semibold hover:bg-green-700 disabled:bg-gray-400 flex items-center justify-center gap-2">
-                         {isCalculating ? <Spinner/> : <><TruckIcon className="w-5 h-5"/> Calcular Ruta Óptima</>}
-                     </button>
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-5 rounded-xl border border-gray-200 shadow-sm">
+                    <h3 className="font-bold text-lg mb-3 flex items-center gap-2 text-gray-900">
+                        <Truck size={20} className="text-[#f7931e]" />
+                        Planificador de Ruta
+                    </h3>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Punto de Partida
+                    </label>
+                    <select 
+                        value={startOllaId} 
+                        onChange={(e) => setStartOllaId(e.target.value)} 
+                        className="w-full p-3 border border-gray-300 rounded-lg mb-3 bg-white focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e] disabled:bg-gray-100 disabled:cursor-not-allowed" 
+                        disabled={ollas.length === 0}
+                    >
+                        {ollas.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    </select>
+                    <button 
+                        onClick={calculateRoute} 
+                        disabled={isCalculating || ollas.length < 2} 
+                        className="w-full bg-gradient-to-r from-[#f7931e] to-[#ff9f3a] text-white py-3 rounded-lg font-semibold hover:shadow-lg disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow transition-all"
+                    >
+                        {isCalculating ? (
+                            <>
+                                <Spinner />
+                                Calculando...
+                            </>
+                        ) : (
+                            <>
+                                <Navigation size={20} />
+                                Calcular Ruta Óptima
+                            </>
+                        )}
+                    </button>
                 </div>
             </div>
             
@@ -332,13 +457,28 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
             </div>
         </div>
 
-        {error && <div className="mt-4 text-red-600 bg-red-100 p-4 rounded-md">{error}</div>}
+        {error && (
+            <div className="mt-6 text-red-700 bg-red-50 p-4 rounded-lg border border-red-200 flex items-start gap-3">
+                <div className="text-red-500 mt-0.5">⚠</div>
+                <div className="flex-1">{error}</div>
+            </div>
+        )}
 
         {(isCalculating || routeDescription) && (
             <div className="mt-6 animate-fade-in">
                 <Card>
-                    <h3 className="text-xl font-bold text-[#5fa25f] mb-3">Plan de Ruta Optimizado</h3>
-                    {isCalculating && !routeDescription && <p className="text-gray-600">Calculando la ruta más eficiente...</p>}
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="bg-gradient-to-br from-[#f7931e] to-[#ff9f3a] p-2 rounded-lg">
+                            <Navigation className="text-white" size={24} />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900">Plan de Ruta Optimizado</h3>
+                    </div>
+                    {isCalculating && !routeDescription && (
+                        <div className="flex items-center gap-3 text-gray-600">
+                            <Spinner />
+                            <span>Calculando la ruta más eficiente...</span>
+                        </div>
+                    )}
                     {routeDescription && <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: routeDescription }} />}
                 </Card>
             </div>
