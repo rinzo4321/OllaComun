@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import Card from './shared/Card';
 import { Transaction, OllaLocation } from '../types';
+import { TrendingUp, Users, Package, Repeat } from 'lucide-react';
 
 declare var Chart: any;
 
@@ -93,10 +94,23 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ollas }) => {
                         labels: ['Donaciones', 'Intercambios'],
                         datasets: [{
                             data: [donationCount, exchangeCount],
-                            backgroundColor: ['#5fa25f', '#f4a949'],
+                            backgroundColor: ['#f7931e', '#ff9f3a'],
+                            borderWidth: 0,
                         }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false }
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    padding: 15,
+                                    font: { size: 12, weight: 'bold' }
+                                }
+                            }
+                        }
+                    }
                 });
                 charts.push(activityChart);
             }
@@ -117,13 +131,38 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ollas }) => {
                         datasets: [{
                             label: 'Número de Transacciones',
                             data: sortedDates.map(date => txsByDate[date]),
-                            borderColor: '#f4a949',
-                            tension: 0.1,
+                            borderColor: '#f7931e',
+                            backgroundColor: 'rgba(247, 147, 30, 0.1)',
+                            tension: 0.3,
                             fill: true,
-                            backgroundColor: '#f4a94933'
+                            borderWidth: 3,
+                            pointBackgroundColor: '#f7931e',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointRadius: 5,
+                            pointHoverRadius: 7
                         }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        plugins: { 
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        }
+                    }
                 });
                 charts.push(timelineChart);
             }
@@ -149,14 +188,31 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ollas }) => {
                         datasets: [{
                             label: 'Cantidad (kg/unidades)',
                             data: topProducts.map(([, qty]) => qty),
-                            backgroundColor: ['#5fa25f', '#6eb86e', '#82c082', '#97c997', '#aad2aa'],
+                            backgroundColor: ['#f7931e', '#ff9f3a', '#ffaa4d', '#ffb560', '#ffc073'],
+                            borderRadius: 8,
+                            borderWidth: 0,
                         }]
                     },
                     options: { 
                         indexAxis: 'y', 
                         responsive: true, 
                         maintainAspectRatio: false,
-                        plugins: { legend: { display: false } } 
+                        plugins: { 
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                }
+                            },
+                            y: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        }
                     }
                 });
                 charts.push(productsChart);
@@ -186,19 +242,53 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ollas }) => {
     }, [filteredTransactions]);
 
     const metrics = [
-        { label: 'Total Donaciones (Kg)', value: kpiMetrics.totalDonationsKg, color: 'text-[#f7931e]' },
-        { label: 'Ollas Activas', value: kpiMetrics.activeOllas, color: 'text-[#f7931e]' },
-        { label: 'Donaciones Registradas', value: kpiMetrics.totalDonationsCount, color: 'text-[#f7931e]' },
-        { label: 'Intercambios Realizados', value: kpiMetrics.totalExchanges, color: 'text-[#f7931e]' },
+        { 
+            label: 'Total Donaciones', 
+            value: kpiMetrics.totalDonationsKg, 
+            unit: 'kg',
+            icon: TrendingUp,
+            gradient: 'from-[#f7931e] to-[#ff9f3a]'
+        },
+        { 
+            label: 'Ollas Activas', 
+            value: kpiMetrics.activeOllas,
+            unit: 'ollas',
+            icon: Users,
+            gradient: 'from-[#f7931e] to-[#ff9f3a]'
+        },
+        { 
+            label: 'Donaciones', 
+            value: kpiMetrics.totalDonationsCount,
+            unit: 'registros',
+            icon: Package,
+            gradient: 'from-[#f7931e] to-[#ff9f3a]'
+        },
+        { 
+            label: 'Intercambios', 
+            value: kpiMetrics.totalExchanges,
+            unit: 'realizados',
+            icon: Repeat,
+            gradient: 'from-[#f7931e] to-[#ff9f3a]'
+        },
     ];
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                <h2 className="text-3xl font-bold text-[#5fa25f]">Panel de Control</h2>
-                <div className="flex bg-gray-200 p-1 rounded-lg">
+                <h2 className="text-3xl font-bold bg-gradient-to-r from-[#f7931e] to-[#ff9f3a] bg-clip-text text-transparent">
+                    Panel de Control
+                </h2>
+                <div className="flex bg-gray-100 p-1.5 rounded-xl border border-gray-200">
                     {(['7d', '30d', 'all'] as TimeRange[]).map(range => (
-                        <button key={range} onClick={() => setTimeRange(range)} className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${timeRange === range ? 'bg-white text-[#f4a949] shadow' : 'text-gray-600 hover:bg-white/50'}`}>
+                        <button 
+                            key={range} 
+                            onClick={() => setTimeRange(range)} 
+                            className={`px-5 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${
+                                timeRange === range 
+                                    ? 'bg-gradient-to-r from-[#f7931e] to-[#ff9f3a] text-white shadow-md' 
+                                    : 'text-gray-600 hover:bg-white hover:text-[#f7931e]'
+                            }`}
+                        >
                            {range === '7d' ? '7 Días' : range === '30d' ? '30 Días' : 'Historial'}
                         </button>
                     ))}
@@ -206,25 +296,47 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ollas }) => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {metrics.map(metric => (
-                     <Card key={metric.label}>
-                        <h3 className="text-md text-gray-500 truncate">{metric.label}</h3>
-                        <p className={`text-4xl font-bold ${metric.color}`}>{metric.value}</p>
-                    </Card>
-                ))}
+                {metrics.map(metric => {
+                    const Icon = metric.icon;
+                    return (
+                        <Card key={metric.label} padding="md" hover>
+                            <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                    <p className="text-sm font-medium text-gray-600 mb-2">{metric.label}</p>
+                                    <p className="text-3xl font-bold text-gray-900 mb-1">{metric.value}</p>
+                                    <p className="text-xs text-gray-500">{metric.unit}</p>
+                                </div>
+                                <div className={`bg-gradient-to-br ${metric.gradient} p-3 rounded-xl shadow-lg`}>
+                                    <Icon className="text-white" size={24} strokeWidth={2.5} />
+                                </div>
+                            </div>
+                        </Card>
+                    );
+                })}
             </div>
+            
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                 <Card className="lg:col-span-2">
-                    <h3 className="text-xl font-bold mb-4">Actividad por Tipo</h3>
+                 <Card className="lg:col-span-2" padding="md">
+                    <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-1 h-6 bg-gradient-to-b from-[#f7931e] to-[#ff9f3a] rounded-full"></div>
+                        Actividad por Tipo
+                    </h3>
                     <div className="h-64"><canvas ref={activityChartRef}></canvas></div>
                 </Card>
-                 <Card className="lg:col-span-3">
-                    <h3 className="text-xl font-bold mb-4">Transacciones en el Tiempo</h3>
+                 <Card className="lg:col-span-3" padding="md">
+                    <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                        <div className="w-1 h-6 bg-gradient-to-b from-[#f7931e] to-[#ff9f3a] rounded-full"></div>
+                        Transacciones en el Tiempo
+                    </h3>
                     <div className="h-64"><canvas ref={timelineChartRef}></canvas></div>
                 </Card>
             </div>
-             <Card>
-                <h3 className="text-xl font-bold mb-4">Top 5 Productos Donados</h3>
+            
+             <Card padding="md">
+                <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <div className="w-1 h-6 bg-gradient-to-b from-[#f7931e] to-[#ff9f3a] rounded-full"></div>
+                    Top 5 Productos Donados
+                </h3>
                  <div className="h-80"><canvas ref={productsChartRef}></canvas></div>
             </Card>
         </div>

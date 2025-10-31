@@ -4,6 +4,7 @@ import { recommendSubstitutes } from '../services/geminiService';
 import Card from './shared/Card';
 import Spinner from './shared/Spinner';
 import { LightbulbIcon } from './icons/Icons';
+import { TrendingUp, TrendingDown, Calendar, DollarSign, AlertTriangle } from 'lucide-react';
 
 interface PriceRadarProps {
   priceData: ProductPrice[];
@@ -98,18 +99,27 @@ const PriceRadar: React.FC<PriceRadarProps> = ({ priceData, ipcData }) => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <Card className="lg:col-span-1">
-            <h2 className="text-2xl font-bold text-[#5fa25f] mb-4">Radar de Precios</h2>
+        <Card className="lg:col-span-1" padding="md">
+            <div className="flex items-center gap-3 mb-6">
+                <div className="bg-gradient-to-br from-[#f7931e] to-[#ff9f3a] p-3 rounded-xl shadow-lg">
+                    <TrendingUp className="text-white" size={28} strokeWidth={2.5} />
+                </div>
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Radar de Precios</h2>
+                    <p className="text-sm text-gray-600">Predicción inteligente</p>
+                </div>
+            </div>
             <div className="space-y-4">
                 <div>
-                    <label htmlFor="product-select" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="product-select" className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                        <DollarSign size={16} className="text-[#f7931e]" />
                         Selecciona un Producto
                     </label>
                     <select
                         id="product-select"
                         value={selectedProduct}
                         onChange={(e) => setSelectedProduct(e.target.value)}
-                        className="w-full p-2 border rounded-md bg-white focus:ring-2 focus:ring-[#f4a949]"
+                        className="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e] transition-all"
                     >
                         {sortedPriceData.map(p => (
                             <option key={p.name} value={p.name} className="capitalize">{p.name}</option>
@@ -117,7 +127,8 @@ const PriceRadar: React.FC<PriceRadarProps> = ({ priceData, ipcData }) => {
                     </select>
                 </div>
                 <div>
-                    <label htmlFor="date-input" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="date-input" className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                        <Calendar size={16} className="text-[#f7931e]" />
                         Fecha de Predicción
                     </label>
                     <input
@@ -125,38 +136,69 @@ const PriceRadar: React.FC<PriceRadarProps> = ({ priceData, ipcData }) => {
                         id="date-input"
                         value={targetDate}
                         onChange={(e) => setTargetDate(e.target.value)}
-                        className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#f4a949]"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e] transition-all"
                     />
                 </div>
                 <button
                     onClick={handlePredict}
                     disabled={isLoading}
-                    className="w-full bg-[#f4a949] text-white py-3 rounded-lg text-lg font-bold hover:bg-orange-500 transition-transform transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                    className="w-full bg-gradient-to-r from-[#f7931e] to-[#ff9f3a] text-white py-4 rounded-xl text-lg font-bold hover:shadow-xl transition-all transform hover:scale-[1.02] disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-3 shadow-lg"
                 >
-                    {isLoading ? <Spinner /> : '📡 Predecir Precio'}
+                    {isLoading ? (
+                        <>
+                            <Spinner />
+                            Analizando...
+                        </>
+                    ) : (
+                        <>
+                            <TrendingUp size={24} />
+                            Predecir Precio
+                        </>
+                    )}
                 </button>
             </div>
         </Card>
 
         <div className="lg:col-span-2 space-y-6">
-            {error && <div className="text-red-600 bg-red-100 p-4 rounded-md">{error}</div>}
+            {error && (
+                <div className="text-red-700 bg-red-50 p-4 rounded-xl border border-red-200 flex items-start gap-3">
+                    <AlertTriangle size={24} className="text-red-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">{error}</div>
+                </div>
+            )}
 
             {prediction && (
-                <Card className="animate-fade-in">
-                    <h3 className="text-xl font-bold text-[#5fa25f] mb-4">Resultado de la Predicción</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                        <div>
-                            <p className="text-sm text-gray-500">Precio Base (Jul 2025)</p>
-                            <p className="text-2xl font-bold">S/ {prediction.basePrice.toFixed(2)}</p>
+                <Card className="animate-fade-in" padding="md">
+                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                        <div className="w-1 h-6 bg-gradient-to-b from-[#f7931e] to-[#ff9f3a] rounded-full"></div>
+                        Resultado de la Predicción
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
+                            <div className="flex items-center gap-2 mb-2">
+                                <DollarSign size={18} className="text-gray-600" />
+                                <p className="text-sm text-gray-600 font-medium">Precio Base (Jul 2025)</p>
+                            </div>
+                            <p className="text-3xl font-bold text-gray-900">S/ {prediction.basePrice.toFixed(2)}</p>
                         </div>
-                        <div>
-                            <p className="text-sm text-gray-500">Precio Estimado</p>
-                            <p className="text-3xl font-bold text-[#f4a949]">S/ {prediction.predictedPrice.toFixed(2)}</p>
+                        <div className="bg-gradient-to-br from-[#fff8ed] to-white p-5 rounded-xl border-2 border-[#f7931e]/30 shadow-md">
+                            <div className="flex items-center gap-2 mb-2">
+                                <TrendingUp size={18} className="text-[#f7931e]" />
+                                <p className="text-sm text-[#f7931e] font-medium">Precio Estimado</p>
+                            </div>
+                            <p className="text-4xl font-bold text-[#f7931e]">S/ {prediction.predictedPrice.toFixed(2)}</p>
                         </div>
-                        <div>
-                            <p className="text-sm text-gray-500">Variación</p>
-                            <p className={`text-2xl font-bold ${getVariationColor(prediction.variation)}`}>
-                                {prediction.variation > 0 ? '▲' : '▼'} {(prediction.variation * 100).toFixed(1)}%
+                        <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
+                            <div className="flex items-center gap-2 mb-2">
+                                {prediction.variation > 0 ? (
+                                    <TrendingUp size={18} className={getVariationColor(prediction.variation)} />
+                                ) : (
+                                    <TrendingDown size={18} className={getVariationColor(prediction.variation)} />
+                                )}
+                                <p className="text-sm text-gray-600 font-medium">Variación</p>
+                            </div>
+                            <p className={`text-3xl font-bold ${getVariationColor(prediction.variation)}`}>
+                                {prediction.variation > 0 ? '+' : ''}{(prediction.variation * 100).toFixed(1)}%
                             </p>
                         </div>
                     </div>
@@ -164,19 +206,29 @@ const PriceRadar: React.FC<PriceRadarProps> = ({ priceData, ipcData }) => {
             )}
 
             {substitutes.length > 0 && (
-                <Card className="animate-fade-in border-2 border-red-500 bg-red-50/50">
-                    <h3 className="text-xl font-bold text-red-600 mb-3 flex items-center gap-2">
-                        <LightbulbIcon className="w-6 h-6" /> ¡Alerta de Precio! Alternativas Inteligentes
-                    </h3>
-                    <p className="text-gray-700 mb-4">El precio de <span className="font-bold capitalize">{selectedProduct}</span> podría aumentar considerablemente. Considera estas alternativas más económicas:</p>
+                <Card className="animate-fade-in border-2 border-red-400 bg-red-50/50" padding="md">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="bg-red-100 p-2 rounded-lg">
+                            <AlertTriangle className="text-red-600" size={24} />
+                        </div>
+                        <h3 className="text-xl font-bold text-red-600">
+                            ¡Alerta de Precio! Alternativas Inteligentes
+                        </h3>
+                    </div>
+                    <p className="text-gray-700 mb-4">
+                        El precio de <span className="font-bold capitalize text-[#f7931e]">{selectedProduct}</span> podría aumentar considerablemente. Considera estas alternativas más económicas:
+                    </p>
                     <div className="space-y-3">
                         {substitutes.map(sub => (
-                            <div key={sub.name} className="bg-white p-3 rounded-lg shadow-sm">
-                                <div className="flex justify-between items-center">
-                                    <p className="font-bold text-lg capitalize text-green-700">{sub.name}</p>
-                                    <p className="font-semibold text-green-800">S/ {sub.price.toFixed(2)}</p>
+                            <div key={sub.name} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:border-[#f7931e] transition-all">
+                                <div className="flex justify-between items-center mb-2">
+                                    <p className="font-bold text-lg capitalize text-gray-900">{sub.name}</p>
+                                    <div className="flex items-center gap-1 bg-green-100 px-3 py-1 rounded-full">
+                                        <DollarSign size={16} className="text-green-700" />
+                                        <p className="font-bold text-green-700">{sub.price.toFixed(2)}</p>
+                                    </div>
                                 </div>
-                                <p className="text-sm text-gray-600 italic mt-1">"{sub.reason}"</p>
+                                <p className="text-sm text-gray-600 italic">"{sub.reason}"</p>
                             </div>
                         ))}
                     </div>
