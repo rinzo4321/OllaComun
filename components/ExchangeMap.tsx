@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Card from './shared/Card';
 import { LIMA_CENTER } from '../constants';
 import { OllaLocation, ProductPrice } from '../types';
-import { Plus, Truck, MapPin, Navigation, X, TrendingUp, TrendingDown, Package } from 'lucide-react';
+import { Plus, Truck, MapPin, Navigation, X, TrendingUp, TrendingDown, Package, ListChecks } from 'lucide-react';
 import Spinner from './shared/Spinner';
 
 
@@ -30,6 +30,36 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
     const [routeDescription, setRouteDescription] = useState<string>('');
     const [isCalculating, setIsCalculating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [selectedOllaIds, setSelectedOllaIds] = useState<string[]>([]);
+    
+    useEffect(() => {
+      setSelectedOllaIds(ollas.map(o => o.id));
+    }, []);
+
+    useEffect(() => {
+      const availableStartOllas = ollas.filter(o => selectedOllaIds.includes(o.id));
+      if (!selectedOllaIds.includes(startOllaId) && availableStartOllas.length > 0) {
+          setStartOllaId(availableStartOllas[0].id);
+      } else if (availableStartOllas.length === 0) {
+          setStartOllaId('');
+      }
+    }, [selectedOllaIds, startOllaId, ollas]);
+
+    const handleOllaSelectionChange = (ollaId: string) => {
+        setSelectedOllaIds(prev =>
+            prev.includes(ollaId)
+                ? prev.filter(id => id !== ollaId)
+                : [...prev, ollaId]
+        );
+    };
+
+    const toggleSelectAllOllas = () => {
+        if (selectedOllaIds.length === ollas.length) {
+            setSelectedOllaIds([]);
+        } else {
+            setSelectedOllaIds(ollas.map(o => o.id));
+        }
+    };
     
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -94,23 +124,24 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
         setError(null);
         setCalculatedRoute(null);
         setRouteDescription('');
+        
+        const routeOllas = ollas.filter(o => selectedOllaIds.includes(o.id));
 
-        // Short timeout to allow spinner to render before synchronous, blocking calculation
         setTimeout(() => {
             try {
                 if (typeof L === 'undefined') {
                     throw new Error("Leaflet no está cargado aún. Por favor, espera un momento e intenta de nuevo.");
                 }
                 
-                if (ollas.length < 2) {
-                    throw new Error("Se necesitan al menos dos ollas para calcular una ruta.");
+                if (routeOllas.length < 2) {
+                    throw new Error("Se necesitan al menos dos ollas seleccionadas para calcular una ruta.");
                 }
-                const startOlla = ollas.find(o => o.id === startOllaId);
+                const startOlla = routeOllas.find(o => o.id === startOllaId);
                 if (!startOlla) {
-                    throw new Error("No se pudo encontrar la olla de partida seleccionada.");
+                    throw new Error("No se pudo encontrar la olla de partida seleccionada. Por favor, selecciona una de la lista.");
                 };
 
-                let unvisited = [...ollas.filter(o => o.id !== startOllaId)];
+                let unvisited = [...routeOllas.filter(o => o.id !== startOllaId)];
                 let route: OllaLocation[] = [startOlla];
                 let currentOlla = startOlla;
 
@@ -133,15 +164,14 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
                         currentOlla = nearest;
                         unvisited = unvisited.filter(o => o.id !== nearest!.id);
                     } else {
-                        break; // Should not happen if unvisited is not empty
+                        break;
                     }
                 }
                 
                 setCalculatedRoute(route);
                 
-                // Locally generate the route description as an HTML string
                 let description = `
-                <p class="text-gray-700">Esta es la ruta más eficiente (usando el vecino más cercano) para visitar todas las ollas, comenzando desde <b style="color: #f7931e;">${startOlla.name}</b>.</p>
+                <p class="text-gray-700">Esta es la ruta más eficiente para visitar las ollas seleccionadas, comenzando desde <b style="color: #f7931e;">${startOlla.name}</b>.</p>
                 <h4 class="font-bold mt-4 mb-2 text-gray-900 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f7931e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg>
                     Orden de Visita:
@@ -177,11 +207,10 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
             } finally {
                 setIsCalculating(false);
             }
-        }, 50); // Small timeout allows UI to update and show spinner
+        }, 50);
     };
 
     useEffect(() => {
-        // Check if Leaflet is loaded
         if (typeof L === 'undefined') {
             console.warn('Leaflet not loaded yet');
             return;
@@ -200,7 +229,7 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
             }
         }
 
-        return () => { // Cleanup
+        return () => {
             if (mapInstance.current) {
                 try {
                     mapInstance.current.remove();
@@ -285,6 +314,8 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
             }
         }
     }, [calculatedRoute]);
+
+    const availableStartOllas = ollas.filter(o => selectedOllaIds.includes(o.id));
 
     return (
     <Card>
@@ -404,25 +435,57 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({ ollas, addOlla, priceData }) 
                     )}
                 </div>
 
-                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-5 rounded-xl border border-gray-200 shadow-sm">
-                    <h3 className="font-bold text-lg mb-3 flex items-center gap-2 text-gray-900">
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
+                    <h3 className="font-bold text-lg flex items-center gap-2 text-gray-900">
                         <Truck size={20} className="text-[#f7931e]" />
                         Planificador de Ruta
                     </h3>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Punto de Partida
-                    </label>
-                    <select 
-                        value={startOllaId} 
-                        onChange={(e) => setStartOllaId(e.target.value)} 
-                        className="w-full p-3 border border-gray-300 rounded-lg mb-3 bg-white focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e] disabled:bg-gray-100 disabled:cursor-not-allowed" 
-                        disabled={ollas.length === 0}
-                    >
-                        {ollas.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                    </select>
+
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                            <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                                <ListChecks size={16} className="text-[#f7931e]" />
+                                Puntos de Intercambio a Incluir
+                            </label>
+                            <button onClick={toggleSelectAllOllas} className="text-xs font-bold text-[#f7931e] hover:underline">
+                                {selectedOllaIds.length === ollas.length ? 'Deseleccionar' : 'Seleccionar Todos'}
+                            </button>
+                        </div>
+                        <div className="max-h-32 overflow-y-auto space-y-2 pr-2">
+                          {ollas.map(olla => (
+                              <div key={olla.id} className="flex items-center bg-white p-2 rounded-md">
+                                  <input
+                                      type="checkbox"
+                                      id={`olla-checkbox-${olla.id}`}
+                                      checked={selectedOllaIds.includes(olla.id)}
+                                      onChange={() => handleOllaSelectionChange(olla.id)}
+                                      className="h-4 w-4 rounded border-gray-300 text-[#f7931e] focus:ring-[#f7931e] cursor-pointer"
+                                  />
+                                  <label htmlFor={`olla-checkbox-${olla.id}`} className="ml-3 block text-sm font-medium text-gray-800 cursor-pointer">
+                                      {olla.name}
+                                  </label>
+                              </div>
+                          ))}
+                        </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Punto de Partida
+                      </label>
+                      <select 
+                          value={startOllaId} 
+                          onChange={(e) => setStartOllaId(e.target.value)} 
+                          className="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e] disabled:bg-gray-100 disabled:cursor-not-allowed" 
+                          disabled={availableStartOllas.length === 0}
+                      >
+                          {availableStartOllas.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                      </select>
+                    </div>
+
                     <button 
                         onClick={calculateRoute} 
-                        disabled={isCalculating || ollas.length < 2} 
+                        disabled={isCalculating || selectedOllaIds.length < 2} 
                         className="w-full bg-gradient-to-r from-[#f7931e] to-[#ff9f3a] text-white py-3 rounded-lg font-semibold hover:shadow-lg disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow transition-all"
                     >
                         {isCalculating ? (
