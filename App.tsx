@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import RecipeGenerator from './components/RecipeGenerator';
@@ -55,7 +56,7 @@ const App: React.FC = () => {
         }
       }
 
-      // Parse wholesale data
+      // Parse wholesale data (now considered retail as per user instruction)
       Papa.parse(WHOLESALE_PRICES_CSV, {
         header: true,
         skipEmptyLines: true,
@@ -63,11 +64,22 @@ const App: React.FC = () => {
           const wholesalePrices = results.data.map((row: any) => {
             const price = parseFloat(row['Precio Prom. (S/xKg)']);
             if (row.Producto && !isNaN(price) && price > 0) {
+              const productName = row.Producto.toLowerCase();
+              let variety = (row.Variedad || '').toLowerCase();
+              variety = variety.split('/')[0].trim();
+              
+              let finalName;
+              if (variety.includes(productName)) {
+                  finalName = variety;
+              } else {
+                  finalName = `${productName} ${variety}`.trim();
+              }
+
               return {
-                name: `${row.Producto} (${row.Variedad || 'único'})`.toLowerCase(),
+                name: finalName,
                 price: price,
                 unit: 'kg',
-                source: 'mayorista'
+                source: 'minorista' // Changed from 'mayorista' as requested
               };
             }
             return null;
@@ -77,27 +89,41 @@ const App: React.FC = () => {
         }
       });
 
-      // Parse retail data
+      // Parse retail and wholesale data from the second dataset
       Papa.parse(RETAIL_PRICES_CSV, {
         header: true,
         skipEmptyLines: true,
         complete: (results: any) => {
-          const retailPrices = results.data.map((row: any) => {
-            const price = parseFloat(row.PRECIO_MINORISTA);
-            if (row.PRODUCTO && !isNaN(price) && price > 0) {
-              return {
-                name: row.PRODUCTO.toLowerCase(),
-                price: price,
-                unit: row.UNIDAD_MEDIDA_MIN ? row.UNIDAD_MEDIDA_MIN.toLowerCase() : 'unidad',
-                source: 'minorista'
-              };
+          const parsedPrices: ProductPrice[] = results.data.flatMap((row: any) => {
+            const prices: ProductPrice[] = [];
+            const productName = row.PRODUCTO?.toLowerCase();
+            if (!productName) return [];
+
+            // Retail price
+            const retailPrice = parseFloat(row.PRECIO_MINORISTA);
+            if (!isNaN(retailPrice) && retailPrice > 0) {
+                prices.push({
+                    name: productName,
+                    price: retailPrice,
+                    unit: row.UNIDAD_MEDIDA_MIN ? row.UNIDAD_MEDIDA_MIN.toLowerCase() : 'unidad',
+                    source: 'minorista'
+                });
             }
-            return null;
-          }).filter(Boolean);
-          setPriceData(prev => {
-            const allPrices = [...prev, ...retailPrices];
-            return Array.from(new Map(allPrices.map(item => [item.name, item])).values());
+
+            // Wholesale price
+            const wholesalePrice = parseFloat(row.PRECIO_MAYORISTA);
+            if (!isNaN(wholesalePrice) && wholesalePrice > 0) {
+                prices.push({
+                    name: productName,
+                    price: wholesalePrice,
+                    unit: row.UNIDAD_MEDIDA_MAY ? row.UNIDAD_MEDIDA_MAY.toLowerCase() : 'unidad',
+                    source: 'mayorista'
+                });
+            }
+            
+            return prices;
           });
+          setPriceData(prev => [...prev, ...parsedPrices]);
           onComplete();
         }
       });
