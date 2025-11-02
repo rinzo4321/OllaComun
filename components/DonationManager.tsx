@@ -1,15 +1,22 @@
 import React, { useState } from 'react';
-import { Transaction, ProductPrice } from '../types';
+import { Transaction, ProductPrice, OllaLocation } from '../types';
 import Card from './shared/Card';
-import { Heart, Package, User, Plus } from 'lucide-react';
+import { Heart, Package, User, Plus, MapPin } from 'lucide-react';
 
 interface DonationManagerProps {
   addTransaction: (newTx: Omit<Transaction, 'id' | 'hash' | 'date'>) => void;
   priceData: ProductPrice[];
+  ollas: OllaLocation[];
 }
 
-const DonationManager: React.FC<DonationManagerProps> = ({ addTransaction, priceData }) => {
-  const [newDonation, setNewDonation] = useState({ product: '', quantity: 1, unit: 'kg', donor: '' });
+const DonationManager: React.FC<DonationManagerProps> = ({ addTransaction, priceData, ollas }) => {
+  const [newDonation, setNewDonation] = useState({ 
+    product: '', 
+    quantity: 1, 
+    unit: 'kg', 
+    donor: '', 
+    to: ollas[0]?.name || '' 
+  });
   const [suggestions, setSuggestions] = useState<ProductPrice[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,8 +37,8 @@ const DonationManager: React.FC<DonationManagerProps> = ({ addTransaction, price
 
   const handleAddDonation = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDonation.product || newDonation.quantity <= 0) {
-      setError("Por favor, completa el producto y la cantidad.");
+    if (!newDonation.product || newDonation.quantity <= 0 || !newDonation.to) {
+      setError("Por favor, completa el producto, la cantidad y el destino.");
       return;
     }
     addTransaction({
@@ -40,9 +47,9 @@ const DonationManager: React.FC<DonationManagerProps> = ({ addTransaction, price
       quantity: newDonation.quantity,
       unit: newDonation.unit,
       from: newDonation.donor || 'Donante Anónimo',
-      to: 'OllaComún 360',
+      to: newDonation.to,
     });
-    setNewDonation({ product: '', quantity: 1, unit: 'kg', donor: '' });
+    setNewDonation({ product: '', quantity: 1, unit: 'kg', donor: '', to: ollas[0]?.name || '' });
     setError(null);
   };
   
@@ -126,6 +133,29 @@ const DonationManager: React.FC<DonationManagerProps> = ({ addTransaction, price
                 <option value="latas">latas</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="to" className="flex items-center gap-2 font-semibold text-gray-700 mb-2">
+              <MapPin size={18} className="text-[#f7931e]" />
+              Destino
+            </label>
+            <select
+              id="to"
+              name="to"
+              value={newDonation.to}
+              onChange={handleInputChange}
+              className="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e]"
+              required
+            >
+              {ollas.length > 0 ? (
+                ollas.map(olla => (
+                  <option key={olla.id} value={olla.name}>{olla.name}</option>
+                ))
+              ) : (
+                <option value="" disabled>No hay ollas registradas</option>
+              )}
+            </select>
           </div>
 
           <div className="relative">

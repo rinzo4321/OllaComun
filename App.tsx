@@ -22,7 +22,7 @@ const initialTransactions: Transaction[] = [
 ];
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('recipes');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [priceData, setPriceData] = useState<ProductPrice[]>([]);
   const [ipcData, setIpcData] = useState<IpcData[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
@@ -147,20 +147,20 @@ const App: React.FC = () => {
       return <div className="text-center p-10">Cargando datos de precios e inflación...</div>;
     }
     switch (activeTab) {
+      case 'dashboard':
+        return <Dashboard transactions={transactions} ollas={ollas} />;
       case 'recipes':
         return <RecipeGenerator priceData={priceData} ipcData={ipcData} />;
       case 'donations':
-        return <DonationManager addTransaction={addTransaction} priceData={priceData} />;
+        return <DonationManager addTransaction={addTransaction} priceData={priceData} ollas={ollas} />;
       case 'map':
         return <ExchangeMap ollas={ollas} addOlla={addOlla} priceData={priceData} />;
       case 'blockchain':
         return <BlockchainLedger transactions={transactions} />;
-      case 'dashboard':
-        return <Dashboard transactions={transactions} ollas={ollas} />;
       case 'radar':
         return <PriceRadar priceData={priceData} ipcData={ipcData} />;
       default:
-        return <RecipeGenerator priceData={priceData} ipcData={ipcData} />;
+        return <Dashboard transactions={transactions} ollas={ollas} />;
     }
   };
 
