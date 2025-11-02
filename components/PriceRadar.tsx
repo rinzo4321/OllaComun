@@ -22,7 +22,7 @@ interface Prediction {
   errorMargin: number;
 }
 
-const CRITICAL_INCREASE_THRESHOLD = 0.15; // 15%
+const CRITICAL_INCREASE_THRESHOLD = 0.04; // 4%
 
 const PriceRadar: React.FC<PriceRadarProps> = ({ priceData, ipcData }) => {
   const [selectedProduct, setSelectedProduct] = useState<string>('');
