@@ -300,22 +300,20 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({ priceData, ipcData, o
     return calculateMissingItems.reduce((sum, item) => sum + item.cost, 0);
   }, [calculateMissingItems]);
 
-  // Funciones para gestionar faltantes y sobrantes por olla
-  const updateOllaSurplus = (ollaId: string, product: string, quantity: number) => {
+  // Estado para inputs de nuevos productos por olla
+  const [newProductsInputs, setNewProductsInputs] = useState<Record<string, { deficit: string; surplus: string }>>({});
+
+  // Funciones mejoradas para gestionar faltantes y sobrantes
+  const addOllaItem = (ollaId: string, type: 'surplus' | 'deficit', product: string, quantity: number = 0) => {
     setOllaStatuses(prev => prev.map(status => {
       if (status.ollaId === ollaId) {
-        const existingSurplus = status.surplus.find(s => s.product === product);
-        if (existingSurplus) {
+        const list = type === 'surplus' ? status.surplus : status.deficit;
+        const existing = list.find(item => item.product.toLowerCase() === product.toLowerCase());
+        
+        if (!existing) {
           return {
             ...status,
-            surplus: status.surplus.map(s => 
-              s.product === product ? { ...s, quantity } : s
-            )
-          };
-        } else {
-          return {
-            ...status,
-            surplus: [...status.surplus, { product, quantity, unit: 'kg' }]
+            [type]: [...list, { product, quantity, unit: 'kg' }]
           };
         }
       }
@@ -323,23 +321,29 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({ priceData, ipcData, o
     }));
   };
 
-  const updateOllaDeficit = (ollaId: string, product: string, quantity: number) => {
+  const updateOllaItem = (ollaId: string, type: 'surplus' | 'deficit', product: string, quantity: number) => {
     setOllaStatuses(prev => prev.map(status => {
       if (status.ollaId === ollaId) {
-        const existingDeficit = status.deficit.find(d => d.product === product);
-        if (existingDeficit) {
-          return {
-            ...status,
-            deficit: status.deficit.map(d => 
-              d.product === product ? { ...d, quantity } : d
-            )
-          };
-        } else {
-          return {
-            ...status,
-            deficit: [...status.deficit, { product, quantity, unit: 'kg' }]
-          };
-        }
+        return {
+          ...status,
+          [type]: status[type].map(item => 
+            item.product.toLowerCase() === product.toLowerCase() 
+              ? { ...item, quantity } 
+              : item
+          )
+        };
+      }
+      return status;
+    }));
+  };
+
+  const removeOllaItem = (ollaId: string, type: 'surplus' | 'deficit', product: string) => {
+    setOllaStatuses(prev => prev.map(status => {
+      if (status.ollaId === ollaId) {
+        return {
+          ...status,
+          [type]: status[type].filter(item => item.product.toLowerCase() !== product.toLowerCase())
+        };
       }
       return status;
     }));
@@ -870,72 +874,181 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({ priceData, ipcData, o
         </Card>
       )}
 
-      {/* Gestión de Faltantes y Sobrantes por Olla */}
+      {/* Gestión de Faltantes y Sobrantes por Olla - Versión Mejorada */}
       {ollas.length > 0 && (
         <Card>
-          <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <MapPin className="text-[#f7931e]" size={24} />
-            Faltantes y Sobrantes por Olla
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <MapPin className="text-[#f7931e]" size={24} />
+              <h3 className="text-xl font-bold text-gray-900">Estado de Inventario por Olla</h3>
+            </div>
+            <p className="text-xs text-gray-500">Registra lo que falta o sobra en cada olla</p>
+          </div>
           
-          <div className="space-y-4">
-            {ollaStatuses.map(status => (
-              <div key={status.ollaId} className="border border-gray-200 rounded-lg p-4">
-                <h4 className="font-semibold text-gray-800 mb-3">{status.ollaName}</h4>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Sobrantes */}
-                  <div>
-                    <h5 className="text-sm font-medium text-green-700 mb-2 flex items-center gap-2">
-                      <Plus size={16} />
-                      Sobrantes
-                    </h5>
+          <div className="space-y-3">
+            {ollaStatuses.map(status => {
+              const hasAnyData = status.deficit.some(d => d.quantity > 0) || 
+                                status.surplus.some(s => s.quantity > 0);
+              const newDeficitProduct = newProductsInputs[status.ollaId]?.deficit || '';
+              const newSurplusProduct = newProductsInputs[status.ollaId]?.surplus || '';
+              
+              const setNewDeficitProduct = (value: string) => {
+                setNewProductsInputs(prev => ({
+                  ...prev,
+                  [status.ollaId]: { ...prev[status.ollaId], deficit: value }
+                }));
+              };
+              
+              const setNewSurplusProduct = (value: string) => {
+                setNewProductsInputs(prev => ({
+                  ...prev,
+                  [status.ollaId]: { ...prev[status.ollaId], surplus: value }
+                }));
+              };
+              
+              return (
+                <div key={status.ollaId} className="border border-gray-200 rounded-lg p-4 hover:border-[#f7931e]/50 transition-colors">
+                  <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <MapPin size={16} className="text-[#f7931e]" />
+                    {status.ollaName}
+                  </h4>
+                  
+                  {/* Faltantes - Prioridad */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h5 className="text-sm font-semibold text-red-700 flex items-center gap-2">
+                        <AlertCircle size={14} />
+                        Faltantes
+                      </h5>
+                      <button
+                        onClick={() => {
+                          if (newDeficitProduct.trim()) {
+                            addOllaItem(status.ollaId, 'deficit', newDeficitProduct.trim());
+                            setNewDeficitProduct('');
+                          }
+                        }}
+                        className="text-xs text-[#f7931e] hover:text-[#ff9f3a] font-medium"
+                      >
+                        + Agregar
+                      </button>
+                    </div>
+                    
+                    {status.deficit.length === 0 && !hasAnyData && (
+                      <p className="text-xs text-gray-400 italic mb-2">No hay faltantes registrados</p>
+                    )}
+                    
                     <div className="space-y-2">
-                      {status.surplus.map((surplus, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
+                      {status.deficit.map((deficit, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-red-50 p-2 rounded border border-red-100">
                           <input
                             type="number"
-                            value={surplus.quantity}
-                            onChange={(e) => updateOllaSurplus(status.ollaId, surplus.product, parseFloat(e.target.value) || 0)}
+                            value={deficit.quantity || ''}
+                            onChange={(e) => updateOllaItem(status.ollaId, 'deficit', deficit.product, parseFloat(e.target.value) || 0)}
                             min="0"
                             step="0.1"
-                            className="w-24 p-2 border border-gray-300 rounded text-sm"
-                            placeholder="Cantidad"
+                            placeholder="0"
+                            className="w-20 p-1.5 border border-red-200 rounded text-sm focus:ring-2 focus:ring-red-300 focus:border-red-400"
                           />
-                          <span className="text-sm text-gray-700 capitalize">{surplus.product}</span>
-                          <span className="text-xs text-gray-500">{surplus.unit}</span>
+                          <span className="text-sm text-gray-700 capitalize flex-1">{deficit.product}</span>
+                          <span className="text-xs text-gray-500">kg</span>
+                          <button
+                            onClick={() => removeOllaItem(status.ollaId, 'deficit', deficit.product)}
+                            className="text-red-400 hover:text-red-600 p-1"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       ))}
+                      
+                      {/* Input para agregar nuevo faltante */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newDeficitProduct}
+                          onChange={(e) => setNewDeficitProduct(e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && newDeficitProduct.trim()) {
+                              addOllaItem(status.ollaId, 'deficit', newDeficitProduct.trim());
+                              setNewDeficitProduct('');
+                            }
+                          }}
+                          placeholder="Producto que falta..."
+                          className="flex-1 p-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-red-300 focus:border-red-400"
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  {/* Faltantes */}
+                  {/* Sobrantes - Secundario */}
                   <div>
-                    <h5 className="text-sm font-medium text-red-700 mb-2 flex items-center gap-2">
-                      <Minus size={16} />
-                      Faltantes
-                    </h5>
+                    <div className="flex items-center justify-between mb-2">
+                      <h5 className="text-sm font-semibold text-green-700 flex items-center gap-2">
+                        <Package size={14} />
+                        Sobrantes (opcional)
+                      </h5>
+                      <button
+                        onClick={() => {
+                          if (newSurplusProduct.trim()) {
+                            addOllaItem(status.ollaId, 'surplus', newSurplusProduct.trim());
+                            setNewSurplusProduct('');
+                          }
+                        }}
+                        className="text-xs text-[#f7931e] hover:text-[#ff9f3a] font-medium"
+                      >
+                        + Agregar
+                      </button>
+                    </div>
+                    
+                    {status.surplus.length === 0 && (
+                      <p className="text-xs text-gray-400 italic mb-2">No hay sobrantes registrados</p>
+                    )}
+                    
                     <div className="space-y-2">
-                      {status.deficit.map((deficit, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
+                      {status.surplus.map((surplus, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-green-50 p-2 rounded border border-green-100">
                           <input
                             type="number"
-                            value={deficit.quantity}
-                            onChange={(e) => updateOllaDeficit(status.ollaId, deficit.product, parseFloat(e.target.value) || 0)}
+                            value={surplus.quantity || ''}
+                            onChange={(e) => updateOllaItem(status.ollaId, 'surplus', surplus.product, parseFloat(e.target.value) || 0)}
                             min="0"
                             step="0.1"
-                            className="w-24 p-2 border border-gray-300 rounded text-sm"
-                            placeholder="Cantidad"
+                            placeholder="0"
+                            className="w-20 p-1.5 border border-green-200 rounded text-sm focus:ring-2 focus:ring-green-300 focus:border-green-400"
                           />
-                          <span className="text-sm text-gray-700 capitalize">{deficit.product}</span>
-                          <span className="text-xs text-gray-500">{deficit.unit}</span>
+                          <span className="text-sm text-gray-700 capitalize flex-1">{surplus.product}</span>
+                          <span className="text-xs text-gray-500">kg</span>
+                          <button
+                            onClick={() => removeOllaItem(status.ollaId, 'surplus', surplus.product)}
+                            className="text-green-400 hover:text-green-600 p-1"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       ))}
+                      
+                      {/* Input para agregar nuevo sobrante */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newSurplusProduct}
+                          onChange={(e) => setNewSurplusProduct(e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && newSurplusProduct.trim()) {
+                              addOllaItem(status.ollaId, 'surplus', newSurplusProduct.trim());
+                              setNewSurplusProduct('');
+                            }
+                          }}
+                          placeholder="Producto que sobra..."
+                          className="flex-1 p-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-300 focus:border-green-400"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       )}
