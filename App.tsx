@@ -31,6 +31,26 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Esperar a que PapaParse esté disponible
+    let retryCount = 0;
+    const maxRetries = 50; // 5 segundos máximo de espera
+    
+    const waitForPapa = () => {
+      if (typeof window !== 'undefined' && (window as any).Papa) {
+        console.log('PapaParse cargado correctamente');
+        parseAllData();
+      } else if (retryCount < maxRetries) {
+        retryCount++;
+        if (retryCount % 10 === 0) {
+          console.log(`Esperando PapaParse... (intento ${retryCount}/${maxRetries})`);
+        }
+        setTimeout(waitForPapa, 100);
+      } else {
+        console.error('PapaParse no se pudo cargar después de múltiples intentos');
+        setIsLoading(false);
+      }
+    };
+
     const parseMonth = (monthStr: string): Date | null => {
         const monthMap: { [key: string]: number } = {
             'Ene': 0, 'Feb': 1, 'Mar': 2, 'Abr': 3, 'May': 4, 'Jun': 5,
@@ -48,6 +68,13 @@ const App: React.FC = () => {
     };
 
     const parseAllData = () => {
+      const Papa = (window as any).Papa;
+      if (!Papa) {
+        console.error('PapaParse no está disponible');
+        setIsLoading(false);
+        return;
+      }
+
       let loadingCounter = 3;
       const onComplete = () => {
         loadingCounter--;
@@ -56,37 +83,50 @@ const App: React.FC = () => {
         }
       }
 
+      const onError = (error: any) => {
+        console.error('Error al parsear datos:', error);
+        loadingCounter--;
+        if (loadingCounter === 0) {
+          setIsLoading(false);
+        }
+      }
+
       // Parse wholesale data (now considered retail as per user instruction)
       Papa.parse(WHOLESALE_PRICES_CSV, {
         header: true,
         skipEmptyLines: true,
         complete: (results: any) => {
-          const wholesalePrices = results.data.map((row: any) => {
-            const price = parseFloat(row['Precio Prom. (S/xKg)']);
-            if (row.Producto && !isNaN(price) && price > 0) {
-              const productName = row.Producto.toLowerCase();
-              let variety = (row.Variedad || '').toLowerCase();
-              variety = variety.split('/')[0].trim();
-              
-              let finalName;
-              if (variety.includes(productName)) {
-                  finalName = variety;
-              } else {
-                  finalName = `${productName} ${variety}`.trim();
-              }
+          try {
+            const wholesalePrices = results.data.map((row: any) => {
+              const price = parseFloat(row['Precio Prom. (S/xKg)']);
+              if (row.Producto && !isNaN(price) && price > 0) {
+                const productName = row.Producto.toLowerCase();
+                let variety = (row.Variedad || '').toLowerCase();
+                variety = variety.split('/')[0].trim();
+                
+                let finalName;
+                if (variety.includes(productName)) {
+                    finalName = variety;
+                } else {
+                    finalName = `${productName} ${variety}`.trim();
+                }
 
-              return {
-                name: finalName,
-                price: price,
-                unit: 'kg',
-                source: 'minorista' // Changed from 'mayorista' as requested
-              };
-            }
-            return null;
-          }).filter(Boolean);
-          setPriceData(prev => [...prev, ...wholesalePrices]);
-          onComplete();
-        }
+                return {
+                  name: finalName,
+                  price: price,
+                  unit: 'kg',
+                  source: 'minorista' // Changed from 'mayorista' as requested
+                };
+              }
+              return null;
+            }).filter(Boolean);
+            setPriceData(prev => [...prev, ...wholesalePrices]);
+            onComplete();
+          } catch (error) {
+            onError(error);
+          }
+        },
+        error: onError
       });
 
       // Parse retail and wholesale data from the second dataset
@@ -94,38 +134,43 @@ const App: React.FC = () => {
         header: true,
         skipEmptyLines: true,
         complete: (results: any) => {
-          const parsedPrices: ProductPrice[] = results.data.flatMap((row: any) => {
-            const prices: ProductPrice[] = [];
-            const productName = row.PRODUCTO?.toLowerCase();
-            if (!productName) return [];
+          try {
+            const parsedPrices: ProductPrice[] = results.data.flatMap((row: any) => {
+              const prices: ProductPrice[] = [];
+              const productName = row.PRODUCTO?.toLowerCase();
+              if (!productName) return [];
 
-            // Retail price
-            const retailPrice = parseFloat(row.PRECIO_MINORISTA);
-            if (!isNaN(retailPrice) && retailPrice > 0) {
-                prices.push({
-                    name: productName,
-                    price: retailPrice,
-                    unit: row.UNIDAD_MEDIDA_MIN ? row.UNIDAD_MEDIDA_MIN.toLowerCase() : 'unidad',
-                    source: 'minorista'
-                });
-            }
+              // Retail price
+              const retailPrice = parseFloat(row.PRECIO_MINORISTA);
+              if (!isNaN(retailPrice) && retailPrice > 0) {
+                  prices.push({
+                      name: productName,
+                      price: retailPrice,
+                      unit: row.UNIDAD_MEDIDA_MIN ? row.UNIDAD_MEDIDA_MIN.toLowerCase() : 'unidad',
+                      source: 'minorista'
+                  });
+              }
 
-            // Wholesale price
-            const wholesalePrice = parseFloat(row.PRECIO_MAYORISTA);
-            if (!isNaN(wholesalePrice) && wholesalePrice > 0) {
-                prices.push({
-                    name: productName,
-                    price: wholesalePrice,
-                    unit: row.UNIDAD_MEDIDA_MAY ? row.UNIDAD_MEDIDA_MAY.toLowerCase() : 'unidad',
-                    source: 'mayorista'
-                });
-            }
-            
-            return prices;
-          });
-          setPriceData(prev => [...prev, ...parsedPrices]);
-          onComplete();
-        }
+              // Wholesale price
+              const wholesalePrice = parseFloat(row.PRECIO_MAYORISTA);
+              if (!isNaN(wholesalePrice) && wholesalePrice > 0) {
+                  prices.push({
+                      name: productName,
+                      price: wholesalePrice,
+                      unit: row.UNIDAD_MEDIDA_MAY ? row.UNIDAD_MEDIDA_MAY.toLowerCase() : 'unidad',
+                      source: 'mayorista'
+                  });
+              }
+              
+              return prices;
+            });
+            setPriceData(prev => [...prev, ...parsedPrices]);
+            onComplete();
+          } catch (error) {
+            onError(error);
+          }
+        },
+        error: onError
       });
 
       // Parse IPC data
@@ -133,6 +178,7 @@ const App: React.FC = () => {
         header: true,
         skipEmptyLines: true,
         complete: (results: any) => {
+          try {
             const parsedIpc = results.data.map((row: any) => {
                 const date = parseMonth(row.Fecha);
                 const variation = parseFloat(row['Indice de precios Lima Metropolitana (var% mensual) - IPC Alimentos y Bebidas']);
@@ -143,11 +189,21 @@ const App: React.FC = () => {
             }).filter((item: IpcData | null): item is IpcData => item !== null);
             setIpcData(parsedIpc.sort((a, b) => a.date.getTime() - b.date.getTime()));
             onComplete();
-        }
+          } catch (error) {
+            onError(error);
+          }
+        },
+        error: onError
       });
     };
 
-    parseAllData();
+    // Iniciar la espera de PapaParse
+    waitForPapa();
+    
+    // Cleanup function
+    return () => {
+      // Cleanup si es necesario
+    };
   }, []);
   
   const addTransaction = (newTx: Omit<Transaction, 'id' | 'hash' | 'date'>) => {
@@ -170,13 +226,18 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (isLoading) {
-      return <div className="text-center p-10">Cargando datos de precios e inflación...</div>;
+      return (
+        <div className="text-center p-10">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#f7931e] mb-4"></div>
+          <p className="text-gray-600">Cargando datos de precios e inflación...</p>
+        </div>
+      );
     }
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard transactions={transactions} ollas={ollas} />;
       case 'recipes':
-        return <RecipeGenerator priceData={priceData} ipcData={ipcData} />;
+        return <RecipeGenerator priceData={priceData} ipcData={ipcData} ollas={ollas} />;
       case 'donations':
         return <DonationManager addTransaction={addTransaction} priceData={priceData} ollas={ollas} />;
       case 'map':

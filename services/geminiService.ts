@@ -1,7 +1,29 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GeneratedRecipe, InventoryItem, ProductPrice, Substitute } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+// Obtener la API Key de las variables de entorno de Vite
+const getApiKey = (): string | undefined => {
+  // Vite expone automáticamente variables que empiezan con VITE_
+  // También verifica process.env que se define en vite.config.ts
+  return import.meta.env.VITE_GEMINI_API_KEY || 
+         (process.env as any)?.GEMINI_API_KEY ||
+         (process.env as any)?.API_KEY ||
+         (window as any).__GEMINI_API_KEY__;
+};
+
+// Inicializar el cliente de manera lazy para evitar errores al cargar el módulo
+let aiInstance: GoogleGenAI | null = null;
+
+const getAI = (): GoogleGenAI => {
+  if (!aiInstance) {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new Error("La API Key de Gemini no está configurada. Por favor, configura VITE_GEMINI_API_KEY en tu archivo .env");
+    }
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+};
 
 const recipeSchema = {
   type: Type.OBJECT,
@@ -48,6 +70,7 @@ export const generateRecipe = async (inventory: InventoryItem[]): Promise<Genera
   `;
 
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
@@ -94,6 +117,7 @@ export const recommendSubstitutes = async (productName: string, availableProduct
     `;
 
     try {
+        const ai = getAI();
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,

@@ -5,6 +5,21 @@ export interface InventoryItem {
   unit: string;
 }
 
+export interface DailyInventoryItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  fromInventoryId: string; // Referencia al inventario total
+}
+
+export interface OllaInventoryStatus {
+  ollaId: string;
+  ollaName: string;
+  surplus: Array<{ product: string; quantity: number; unit: string }>;
+  deficit: Array<{ product: string; quantity: number; unit: string }>;
+}
+
 export interface ProductPrice {
   name: string;
   price: number;
