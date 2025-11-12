@@ -1,5 +1,37 @@
 import { InventoryItem, ProductPrice, GeneratedRecipe, IpcData } from '../types';
-import { Solve } from 'javascript-lp-solver';
+
+// Importar Solve desde javascript-lp-solver usando import dinámico
+// Esto es necesario porque el proyecto usa ES modules y javascript-lp-solver es CommonJS
+let SolvePromise: Promise<any> | null = null;
+let Solve: any = null;
+
+// Función para cargar el solver de forma lazy
+const loadSolver = async (): Promise<any> => {
+  if (Solve) return Solve;
+  
+  if (!SolvePromise) {
+    SolvePromise = import('javascript-lp-solver').then((module: any) => {
+      Solve = module.Solve || module.default?.Solve;
+      return Solve;
+    }).catch((e) => {
+      console.warn('No se pudo cargar javascript-lp-solver:', e);
+      // Retornar función que indica que no es factible
+      Solve = () => ({ feasible: false });
+      return Solve;
+    });
+  }
+  
+  return SolvePromise;
+};
+
+// Función helper para obtener Solve de forma segura (síncrona cuando ya está cargado)
+const getSolve = (): any => {
+  if (Solve) return Solve;
+  
+  // Si no está cargado, retornar función que indica que no es factible
+  // El componente debería manejar esto de forma asíncrona
+  return () => ({ feasible: false });
+};
 
 export interface OptimizationResult {
   optimalRecipes: Array<{
@@ -84,14 +116,14 @@ const findPrice = (
 /**
  * Optimiza combinaciones de recetas usando programación lineal
  */
-export const optimizeRecipeCombination = (
+export const optimizeRecipeCombination = async (
   availableRecipes: GeneratedRecipe[],
   availableInventory: InventoryItem[],
   priceData: ProductPrice[],
   ipcData: IpcData[],
   targetPeople: number,
   options: OptimizationOptions = {}
-): OptimizationResult => {
+): Promise<OptimizationResult> => {
   if (availableRecipes.length === 0 || availableInventory.length === 0) {
     return {
       optimalRecipes: [],
@@ -186,13 +218,19 @@ export const optimizeRecipeCombination = (
 
   // Resolver el problema
   try {
-    const result = Solve(model);
+    // Cargar el solver si no está disponible
+    const solver = await loadSolver();
+    if (!solver) {
+      throw new Error('Solver no disponible');
+    }
     
-    if (!result.feasible) {
+    const result = solver(model);
+    
+    if (!result || !result.feasible) {
       // Si no es factible, intentamos sin restricciones mínimas
       const relaxedModel = { ...model };
       delete relaxedModel.constraints.people;
-      const relaxedResult = Solve(relaxedModel);
+      const relaxedResult = solver(relaxedModel);
       
       if (!relaxedResult.feasible) {
         return {

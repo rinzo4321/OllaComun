@@ -11,7 +11,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { WHOLESALE_PRICES_CSV, RETAIL_PRICES_CSV } from './data/prices';
 import { IPC_PRICES_CSV } from './data/ipc';
 import { INITIAL_OLLAS } from './constants';
-import { ProductPrice, Transaction, IpcData, OllaLocation } from './types';
+import { ProductPrice, Transaction, IpcData, OllaLocation, OllaInventoryStatus } from './types';
 
 // Declare Papa an external global
 declare var Papa: any;
@@ -29,6 +29,16 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const [ollas, setOllas] = useState<OllaLocation[]>(INITIAL_OLLAS);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Estado compartido para inventario por olla (conecta RecipeGenerator con ExchangeMap)
+  const [ollaInventoryStatuses, setOllaInventoryStatuses] = useState<OllaInventoryStatus[]>(
+    INITIAL_OLLAS.map(olla => ({
+      ollaId: olla.id,
+      ollaName: olla.name,
+      surplus: olla.surplus,
+      deficit: olla.deficit
+    }))
+  );
 
   useEffect(() => {
     // Esperar a que PapaParse esté disponible
@@ -222,6 +232,31 @@ const App: React.FC = () => {
       id: `olla-${ollas.length + 1}-${Date.now()}`
     };
     setOllas(prev => [...prev, newOlla]);
+    // También agregar al estado de inventario
+    setOllaInventoryStatuses(prev => [...prev, {
+      ollaId: newOlla.id,
+      ollaName: newOlla.name,
+      surplus: newOlla.surplus,
+      deficit: newOlla.deficit
+    }]);
+  };
+
+  // Función para actualizar inventario por olla (desde RecipeGenerator)
+  const updateOllaInventory = (status: OllaInventoryStatus) => {
+    setOllaInventoryStatuses(prev => 
+      prev.map(s => s.ollaId === status.ollaId ? status : s)
+    );
+    // También actualizar las ollas para mantener sincronización
+    setOllas(prev => prev.map(olla => {
+      if (olla.id === status.ollaId) {
+        return {
+          ...olla,
+          surplus: status.surplus,
+          deficit: status.deficit
+        };
+      }
+      return olla;
+    }));
   };
 
   const renderContent = () => {
@@ -237,11 +272,27 @@ const App: React.FC = () => {
       case 'dashboard':
         return <Dashboard transactions={transactions} ollas={ollas} />;
       case 'recipes':
-        return <RecipeGenerator priceData={priceData} ipcData={ipcData} ollas={ollas} />;
+        return <RecipeGenerator 
+          priceData={priceData} 
+          ipcData={ipcData} 
+          ollas={ollas} 
+          ollaInventoryStatuses={ollaInventoryStatuses}
+          updateOllaInventory={updateOllaInventory}
+        />;
       case 'donations':
-        return <DonationManager addTransaction={addTransaction} priceData={priceData} ollas={ollas} />;
+        return <DonationManager 
+          addTransaction={addTransaction} 
+          priceData={priceData} 
+          ollas={ollas} 
+        />;
       case 'map':
-        return <ExchangeMap ollas={ollas} addOlla={addOlla} priceData={priceData} />;
+        return <ExchangeMap 
+          ollas={ollas} 
+          addOlla={addOlla} 
+          priceData={priceData}
+          ollaInventoryStatuses={ollaInventoryStatuses}
+          updateOllaInventory={updateOllaInventory}
+        />;
       case 'blockchain':
         return <BlockchainLedger transactions={transactions} />;
       case 'radar':

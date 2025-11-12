@@ -46,8 +46,8 @@ export interface OllaLocation {
   id: string;
   name: string;
   coords: [number, number];
-  surplus: string[];
-  deficit: string[];
+  surplus: Array<{ product: string; quantity: number; unit: string }>;
+  deficit: Array<{ product: string; quantity: number; unit: string }>;
 }
 
 export interface Transaction {
