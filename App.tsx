@@ -292,6 +292,7 @@ const App: React.FC = () => {
           priceData={priceData}
           ollaInventoryStatuses={ollaInventoryStatuses}
           updateOllaInventory={updateOllaInventory}
+          addTransaction={addTransaction}
         />;
       case 'blockchain':
         return <BlockchainLedger transactions={transactions} />;

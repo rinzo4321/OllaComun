@@ -14,6 +14,7 @@ interface ExchangeMapProps {
     priceData: ProductPrice[];
     ollaInventoryStatuses?: OllaInventoryStatus[];
     updateOllaInventory?: (status: OllaInventoryStatus) => void;
+    addTransaction?: (newTx: Omit<import('../types').Transaction, 'id' | 'hash' | 'date'>) => void;
 }
 
 const ExchangeMap: React.FC<ExchangeMapProps> = ({ 
@@ -21,7 +22,8 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
     addOlla, 
     priceData, 
     ollaInventoryStatuses = [],
-    updateOllaInventory
+    updateOllaInventory,
+    addTransaction
 }) => {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapInstance = useRef<any>(null);
@@ -122,6 +124,24 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
     
     const [newProductsInputs, setNewProductsInputs] = useState<Record<string, { product: string; type: 'deficit' | 'surplus' | null }>>({});
     
+    // Función helper para crear transacción de intercambio
+    const createExchangeTransaction = (fromOlla: string, toOlla: string, product: string, quantity: number, unit: string) => {
+        if (addTransaction && quantity > 0) {
+            try {
+                addTransaction({
+                    type: 'Intercambio',
+                    product: product,
+                    quantity: quantity,
+                    unit: unit || 'kg',
+                    from: fromOlla,
+                    to: toOlla
+                });
+            } catch (e) {
+                console.warn('Error al crear transacción de intercambio:', e);
+            }
+        }
+    };
+    
     // Guardar en localStorage cada vez que cambia el inventario
     useEffect(() => {
         try {
@@ -181,17 +201,22 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                             
                             if (!existing) {
                                 // Agregar nuevo producto
+                                const newItem = { product: productName, quantity, unit: 'kg' };
+                                
                                 return {
                                     ...status,
-                                    [type]: [...list, { product: productName, quantity, unit: 'kg' }]
+                                    [type]: [...list, newItem]
                                 };
                             } else {
-                                // Si ya existe, actualizar la cantidad si es 0
+                                // Si ya existe, actualizar solo si la cantidad actual es 0
+                                const oldQuantity = existing.quantity || 0;
+                                const newQuantity = oldQuantity === 0 && quantity > 0 ? quantity : oldQuantity;
+                                
                                 return {
                                     ...status,
                                     [type]: list.map(item => 
                                         item && item.product && item.product.toLowerCase().trim() === productName.toLowerCase()
-                                            ? { ...item, quantity: item.quantity === 0 ? quantity : item.quantity }
+                                            ? { ...item, quantity: newQuantity }
                                             : item
                                     )
                                 };
@@ -470,62 +495,134 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                 
                 setCalculatedRoute(route);
                 
+                // Obtener inventarios actualizados para todas las ollas de la ruta
+                const routeInventories = route.map(olla => {
+                    const inventoryStatus = localInventoryStatuses.find(s => s.ollaId === olla.id);
+                    let surplusList: Array<{ product: string; quantity: number; unit: string }> = [];
+                    let deficitList: Array<{ product: string; quantity: number; unit: string }> = [];
+                    
+                    if (inventoryStatus) {
+                        surplusList = inventoryStatus.surplus.filter(item => item.quantity > 0);
+                        deficitList = inventoryStatus.deficit.filter(item => item.quantity > 0);
+                    } else {
+                        if (Array.isArray(olla.surplus) && olla.surplus.length > 0) {
+                            if (typeof olla.surplus[0] === 'object') {
+                                surplusList = (olla.surplus as any[]).filter((s: any) => s.quantity > 0);
+                            }
+                        }
+                        if (Array.isArray(olla.deficit) && olla.deficit.length > 0) {
+                            if (typeof olla.deficit[0] === 'object') {
+                                deficitList = (olla.deficit as any[]).filter((d: any) => d.quantity > 0);
+                            }
+                        }
+                    }
+                    
+                    return {
+                        ollaId: olla.id,
+                        ollaName: olla.name,
+                        surplus: surplusList,
+                        deficit: deficitList
+                    };
+                });
+                
+                // Crear transacciones de intercambio: emparejar sobrantes con faltantes
+                const exchangesCreated: Array<{from: string, to: string, product: string, quantity: number, unit: string}> = [];
+                
+                routeInventories.forEach((sourceInventory, sourceIdx) => {
+                    sourceInventory.surplus.forEach(surplusItem => {
+                        // Buscar ollas que necesiten este producto
+                        routeInventories.forEach((targetInventory, targetIdx) => {
+                            if (sourceIdx === targetIdx) return; // No intercambiar consigo mismo
+                            
+                            const matchingDeficit = targetInventory.deficit.find(def => 
+                                def.product.toLowerCase() === surplusItem.product.toLowerCase()
+                            );
+                            
+                            if (matchingDeficit && surplusItem.quantity > 0) {
+                                // Calcular cantidad a intercambiar (mínimo entre sobrante y faltante)
+                                const exchangeQuantity = Math.min(surplusItem.quantity, matchingDeficit.quantity);
+                                
+                                // Verificar que no se haya creado ya esta transacción
+                                const alreadyCreated = exchangesCreated.some(ex => 
+                                    ex.from === sourceInventory.ollaName &&
+                                    ex.to === targetInventory.ollaName &&
+                                    ex.product.toLowerCase() === surplusItem.product.toLowerCase()
+                                );
+                                
+                                if (!alreadyCreated && exchangeQuantity > 0) {
+                                    createExchangeTransaction(
+                                        sourceInventory.ollaName,
+                                        targetInventory.ollaName,
+                                        surplusItem.product,
+                                        exchangeQuantity,
+                                        surplusItem.unit || 'kg'
+                                    );
+                                    
+                                    exchangesCreated.push({
+                                        from: sourceInventory.ollaName,
+                                        to: targetInventory.ollaName,
+                                        product: surplusItem.product,
+                                        quantity: exchangeQuantity,
+                                        unit: surplusItem.unit || 'kg'
+                                    });
+                                }
+                            }
+                        });
+                    });
+                });
+                
                 let description = `
                 <p class="text-gray-700">Esta es la ruta más eficiente para visitar las ollas seleccionadas, comenzando desde <b style="color: #f7931e;">${startOlla.name}</b>.</p>
+                ${exchangesCreated.length > 0 ? `<p class="text-green-700 bg-green-50 p-3 rounded-lg mt-3 mb-4"><strong>✓ ${exchangesCreated.length} intercambio(s) registrado(s)</strong> en la Lista de Transacciones</p>` : ''}
                 <h4 class="font-bold mt-4 mb-2 text-gray-900 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f7931e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg>
                     Orden de Visita:
                 </h4>
                 <ol class="list-decimal list-inside space-y-3">`;
                 
-                route.forEach((olla) => {
-                    description += `<li class="font-semibold text-gray-900">${olla.name}`;
+                routeInventories.forEach((inventory) => {
+                    description += `<li class="font-semibold text-gray-900">${inventory.ollaName}`;
                     let details: string[] = [];
                     
-                    // SIEMPRE usar datos del inventario actualizado (prioridad al inventario)
-                    const inventoryStatus = localInventoryStatuses.find(s => s.ollaId === olla.id);
-                    
-                    // Si hay inventario actualizado, usar esos datos; sino usar los de la olla
-                    let surplusList: Array<{ product: string; quantity: number; unit: string }> = [];
-                    let deficitList: Array<{ product: string; quantity: number; unit: string }> = [];
-                    
-                    if (inventoryStatus) {
-                        // Usar datos del inventario actualizado
-                        surplusList = inventoryStatus.surplus.filter(item => item.quantity > 0);
-                        deficitList = inventoryStatus.deficit.filter(item => item.quantity > 0);
-                    } else {
-                        // Fallback a datos de la olla (convertir formato si es necesario)
-                        if (Array.isArray(olla.surplus) && olla.surplus.length > 0) {
-                            if (typeof olla.surplus[0] === 'object') {
-                                surplusList = (olla.surplus as any[]).filter((s: any) => s.quantity > 0);
-                            } else {
-                                // Formato antiguo (solo strings)
-                                surplusList = [];
-                            }
-                        }
-                        if (Array.isArray(olla.deficit) && olla.deficit.length > 0) {
-                            if (typeof olla.deficit[0] === 'object') {
-                                deficitList = (olla.deficit as any[]).filter((d: any) => d.quantity > 0);
-                            } else {
-                                // Formato antiguo (solo strings)
-                                deficitList = [];
-                            }
-                        }
-                    }
-                    
-                    // Solo mostrar productos con cantidad > 0
-                    if (surplusList.length > 0) {
-                        const surplusItems = surplusList.map(s => `${s.product} (${s.quantity} ${s.unit})`);
+                    // Mostrar sobrantes
+                    if (inventory.surplus.length > 0) {
+                        const surplusItems = inventory.surplus.map(s => `${s.product} (${s.quantity} ${s.unit})`);
                         details.push(`<div class="flex items-start gap-2 font-normal text-gray-700 p-2 rounded" style="background-color: #fff8ed; border: 1px solid rgba(247, 147, 30, 0.3);">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f7931e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 flex-shrink-0"><path d="m7 11 5-5 5 5"/><path d="M12 18V6"/></svg>
-                            <span>Recoger excedente: <span class="font-medium">${surplusItems.join(', ')}</span></span>
+                            <span>Excedente disponible: <span class="font-medium">${surplusItems.join(', ')}</span></span>
                         </div>`);
                     }
-                    if (deficitList.length > 0) {
-                        const deficitItems = deficitList.map(d => `${d.product} (${d.quantity} ${d.unit})`);
+                    
+                    // Mostrar faltantes
+                    if (inventory.deficit.length > 0) {
+                        const deficitItems = inventory.deficit.map(d => `${d.product} (${d.quantity} ${d.unit})`);
                         details.push(`<div class="flex items-start gap-2 font-normal text-gray-700 bg-red-50 p-2 rounded">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-600 mt-0.5 flex-shrink-0"><path d="M12 6v6"/><path d="m7 18 5 5 5-5"/></svg>
-                            <span>Cubrir déficit: <span class="font-medium">${deficitItems.join(', ')}</span></span>
+                            <span>Necesita: <span class="font-medium">${deficitItems.join(', ')}</span></span>
+                        </div>`);
+                    }
+                    
+                    // Mostrar intercambios programados para esta olla
+                    const exchangesFromHere = exchangesCreated.filter(ex => ex.from === inventory.ollaName);
+                    const exchangesToHere = exchangesCreated.filter(ex => ex.to === inventory.ollaName);
+                    
+                    if (exchangesFromHere.length > 0) {
+                        const exchangeDetails = exchangesFromHere.map(ex => 
+                            `${ex.product} (${ex.quantity} ${ex.unit}) → ${ex.to}`
+                        );
+                        details.push(`<div class="flex items-start gap-2 font-normal text-blue-700 bg-blue-50 p-2 rounded">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 flex-shrink-0"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                            <span>Enviar: <span class="font-medium">${exchangeDetails.join(', ')}</span></span>
+                        </div>`);
+                    }
+                    
+                    if (exchangesToHere.length > 0) {
+                        const exchangeDetails = exchangesToHere.map(ex => 
+                            `${ex.product} (${ex.quantity} ${ex.unit}) desde ${ex.from}`
+                        );
+                        details.push(`<div class="flex items-start gap-2 font-normal text-green-700 bg-green-50 p-2 rounded">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 flex-shrink-0"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+                            <span>Recibir: <span class="font-medium">${exchangeDetails.join(', ')}</span></span>
                         </div>`);
                     }
                     

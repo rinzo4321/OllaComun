@@ -8,11 +8,11 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
-    { id: 'recipes', label: 'Generador de Recetas', Icon: BookText },
-    { id: 'map', label: 'Mapa de Intercambios', Icon: Map },
+    { id: 'dashboard', label: 'Inicio', Icon: LayoutDashboard },
+    { id: 'recipes', label: 'Inventario', Icon: BookText },
+    { id: 'map', label: 'Mapa', Icon: Map },
     { id: 'donations', label: 'Donaciones', Icon: HandHeart },
-    { id: 'blockchain', label: 'Ledger Blockchain', Icon: Blocks },
+    { id: 'blockchain', label: 'Lista de Transacciones', Icon: Blocks },
     { id: 'radar', label: 'Radar de Precios', Icon: LineChart },
   ];
 
