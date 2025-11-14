@@ -12,7 +12,9 @@ Faltan las variables de entorno de Supabase. Verifica que VITE_SUPABASE_URL y VI
 1. Ve a tu proyecto en Supabase: https://app.supabase.com/project/qfawfuuhscwdccdpafiy/settings/api
 2. En la sección **Project API keys**, copia:
    - **Project URL** → Ejemplo: `https://qfawfuuhscwdccdpafiy.supabase.co`
-   - **anon public** key → Ejemplo: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+   - **anon public** key o **publishable** key → Ejemplo: `sb_publishable_...` o `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+   
+   **Nota:** Supabase ahora puede usar keys con formato `sb_publishable_...` o el formato JWT tradicional. Usa la **publishable** key (NO la secret key).
 
 ### Paso 2: Configurar en Vercel
 
@@ -34,9 +36,13 @@ Faltan las variables de entorno de Supabase. Verifica que VITE_SUPABASE_URL y VI
 
    **Variable 2:**
    - **Name:** `VITE_SUPABASE_ANON_KEY`
-   - **Value:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` (tu anon key)
+   - **Value:** `sb_publishable_pmL65Bc6QLNB0W3wKpykAQ_e7oH05qT` (tu publishable key - NO uses la secret key)
    - **Environment:** Selecciona todas (Production, Preview, Development)
    - Click en **Save**
+   
+   **⚠️ IMPORTANTE:** 
+   - Usa la key que dice **"publishable"** o **"anon public"**
+   - **NO** uses la key que dice **"secret"** (esa es solo para backend)
 
 4. **Redesplegar la Aplicación:**
    - Ve a la pestaña **Deployments**
