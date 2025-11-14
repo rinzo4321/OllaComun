@@ -1,10 +1,12 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { InventoryItem, DailyInventoryItem, ProductPrice, GeneratedRecipe, IpcData, Substitute, OllaInventoryStatus, OllaLocation } from '../types';
 import { generateRecipe, recommendSubstitutes } from '../services/geminiService';
 import { optimizeSingleRecipe, OptimizationResult } from '../services/optimizationService';
+import { supabase } from '../services/supabaseClient';
+import { useOlla } from '../contexts/OllaContext';
 import Card from './shared/Card';
 import Spinner from './shared/Spinner';
-import { Plus, Trash2, ChefHat, Package, DollarSign, Users, ShoppingCart, AlertCircle, ArrowRight, Calendar, Minus, MapPin, Zap } from 'lucide-react';
+import { Plus, Trash2, ChefHat, Package, DollarSign, Users, ShoppingCart, AlertCircle, ArrowRight, Calendar, Minus, MapPin, Zap, Edit2, Save, X } from 'lucide-react';
 
 interface RecipeGeneratorProps {
   priceData: ProductPrice[];
@@ -21,12 +23,13 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
   ollaInventoryStatuses = [],
   updateOllaInventory
 }) => {
-  // Inventario total (almacén)
-  const [totalInventory, setTotalInventory] = useState<InventoryItem[]>([
-    { id: '1', name: 'papa', quantity: 10, unit: 'kg' },
-    { id: '2', name: 'arroz', quantity: 5, unit: 'kg' },
-    { id: '3', name: 'pollo', quantity: 3, unit: 'kg' },
-  ]);
+  const { activeOlla } = useOlla();
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingQuantity, setEditingQuantity] = useState<number>(0);
+  
+  // Inventario total (almacén) - se carga desde Supabase
+  const [totalInventory, setTotalInventory] = useState<InventoryItem[]>([]);
+  const [loadingInventory, setLoadingInventory] = useState(true);
 
   // Inventario diario (lo que se va a usar hoy)
   const [dailyInventory, setDailyInventory] = useState<DailyInventoryItem[]>([]);
@@ -58,6 +61,95 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
         }))
   );
 
+  // Cargar inventario desde Supabase
+  useEffect(() => {
+    loadInventoryFromSupabase();
+  }, [activeOlla]);
+
+  const loadInventoryFromSupabase = async () => {
+    if (!activeOlla) {
+      setTotalInventory([]);
+      setLoadingInventory(false);
+      return;
+    }
+
+    try {
+      setLoadingInventory(true);
+      const { data, error } = await supabase
+        .from('olla_inventories')
+        .select('*')
+        .eq('olla_id', activeOlla.id)
+        .eq('type', 'surplus')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const inventory: InventoryItem[] = (data || []).map(item => ({
+        id: item.id,
+        name: item.product,
+        quantity: parseFloat(item.quantity.toString()),
+        unit: item.unit || 'kg'
+      }));
+
+      setTotalInventory(inventory);
+    } catch (err) {
+      console.error('Error cargando inventario:', err);
+      // Si hay error, usar inventario por defecto
+      setTotalInventory([
+        { id: '1', name: 'papa', quantity: 10, unit: 'kg' },
+        { id: '2', name: 'arroz', quantity: 5, unit: 'kg' },
+        { id: '3', name: 'pollo', quantity: 3, unit: 'kg' },
+      ]);
+    } finally {
+      setLoadingInventory(false);
+    }
+  };
+
+  // Guardar inventario en Supabase
+  const saveInventoryToSupabase = async (item: InventoryItem) => {
+    if (!activeOlla) return;
+
+    try {
+      // Buscar si ya existe en Supabase
+      const { data: existing } = await supabase
+        .from('olla_inventories')
+        .select('id')
+        .eq('olla_id', activeOlla.id)
+        .eq('product', item.name)
+        .eq('type', 'surplus')
+        .single();
+
+      if (existing) {
+        // Actualizar
+        const { error } = await supabase
+          .from('olla_inventories')
+          .update({
+            quantity: item.quantity,
+            unit: item.unit,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id);
+
+        if (error) throw error;
+      } else {
+        // Crear nuevo
+        const { error } = await supabase
+          .from('olla_inventories')
+          .insert({
+            olla_id: activeOlla.id,
+            product: item.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            type: 'surplus'
+          });
+
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.error('Error guardando inventario:', err);
+    }
+  };
+
   // Sincronizar con el estado compartido cuando cambia
   React.useEffect(() => {
     if (ollaInventoryStatuses.length > 0) {
@@ -84,23 +176,80 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
     }
   };
 
-  const addToTotalInventory = () => {
+  const addToTotalInventory = async () => {
     if (newItemName && newItemQty > 0) {
       const existingItem = totalInventory.find(item => item.name.toLowerCase() === newItemName.toLowerCase());
+      let updatedItem: InventoryItem;
+      
       if (existingItem) {
+        updatedItem = { ...existingItem, quantity: existingItem.quantity + newItemQty };
         setTotalInventory(totalInventory.map(item =>
-          item.id === existingItem.id ? { ...item, quantity: item.quantity + newItemQty } : item
+          item.id === existingItem.id ? updatedItem : item
         ));
       } else {
-        setTotalInventory([...totalInventory, { id: Date.now().toString(), name: newItemName, quantity: newItemQty, unit: 'kg' }]);
+        const newId = Date.now().toString();
+        updatedItem = { id: newId, name: newItemName, quantity: newItemQty, unit: 'kg' };
+        setTotalInventory([...totalInventory, updatedItem]);
       }
+      
+      // Guardar en Supabase
+      await saveInventoryToSupabase(updatedItem);
+      
       setNewItemName('');
       setNewItemQty(1);
       setSuggestions([]);
     }
   };
 
-  const removeFromTotalInventory = (id: string) => {
+  const handleEditQuantity = (item: InventoryItem) => {
+    setEditingItemId(item.id);
+    setEditingQuantity(item.quantity);
+  };
+
+  const handleSaveQuantity = async (item: InventoryItem) => {
+    if (editingQuantity < 0) {
+      alert('La cantidad no puede ser negativa');
+      return;
+    }
+
+    const updatedItem = { ...item, quantity: editingQuantity };
+    setTotalInventory(totalInventory.map(i => i.id === item.id ? updatedItem : i));
+    setEditingItemId(null);
+    
+    // Guardar en Supabase
+    await saveInventoryToSupabase(updatedItem);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItemId(null);
+    setEditingQuantity(0);
+  };
+
+  const removeFromTotalInventory = async (id: string) => {
+    const item = totalInventory.find(i => i.id === id);
+    
+    // Eliminar de Supabase
+    if (activeOlla && item) {
+      try {
+        const { data: existing } = await supabase
+          .from('olla_inventories')
+          .select('id')
+          .eq('olla_id', activeOlla.id)
+          .eq('product', item.name)
+          .eq('type', 'surplus')
+          .single();
+
+        if (existing) {
+          await supabase
+            .from('olla_inventories')
+            .delete()
+            .eq('id', existing.id);
+        }
+      } catch (err) {
+        console.error('Error eliminando inventario:', err);
+      }
+    }
+    
     setTotalInventory(totalInventory.filter(item => item.id !== id));
     // También remover del inventario diario si existe
     setDailyInventory(dailyInventory.filter(item => item.fromInventoryId !== id));
@@ -473,37 +622,87 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
           </div>
           
           <div className="space-y-3 mb-6 max-h-64 overflow-y-auto">
-            {totalInventory.map((item) => (
-              <div key={item.id} className="flex justify-between items-center bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 hover:border-[#f7931e] transition-all">
-                <div className="flex items-center gap-3">
-                  <Package size={18} className="text-gray-500" />
-                  <span className="capitalize font-medium text-gray-800">{item.name}</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-sm font-semibold text-[#f7931e] bg-[#fff8ed] px-3 py-1 rounded-full">
-                    {item.quantity} {item.unit}
-                  </span>
-                  <button 
-                    onClick={() => addToDailyInventory(item)}
-                    className="text-[#f7931e] hover:text-[#ff9f3a] hover:bg-[#fff8ed] p-2 rounded-lg transition-all border border-[#f7931e]/30 hover:border-[#f7931e]"
-                    title="Agregar a uso diario (para cocinar hoy)"
-                  >
-                    <Plus size={18} />
-                  </button>
-                  <button 
-                    onClick={() => removeFromTotalInventory(item.id)} 
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-all"
-                    title="Eliminar"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
+            {loadingInventory ? (
+              <div className="flex justify-center py-8">
+                <Spinner />
               </div>
-            ))}
-            {totalInventory.length === 0 && (
+            ) : (
+              totalInventory.map((item) => (
+                <div key={item.id} className="flex justify-between items-center bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 hover:border-[#f7931e] transition-all">
+                  <div className="flex items-center gap-3">
+                    <Package size={18} className="text-gray-500" />
+                    <span className="capitalize font-medium text-gray-800">{item.name}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {editingItemId === item.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={editingQuantity}
+                          onChange={(e) => setEditingQuantity(parseFloat(e.target.value) || 0)}
+                          min="0"
+                          step="0.1"
+                          className="w-20 px-2 py-1 border border-[#f7931e] rounded-lg focus:ring-2 focus:ring-[#f7931e] focus:border-transparent text-sm"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleSaveQuantity(item);
+                            } else if (e.key === 'Escape') {
+                              handleCancelEdit();
+                            }
+                          }}
+                        />
+                        <span className="text-xs text-gray-500">{item.unit}</span>
+                        <button
+                          onClick={() => handleSaveQuantity(item)}
+                          className="text-green-600 hover:text-green-700 hover:bg-green-50 p-1.5 rounded-lg transition-all"
+                          title="Guardar"
+                        >
+                          <Save size={16} />
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-1.5 rounded-lg transition-all"
+                          title="Cancelar"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleEditQuantity(item)}
+                          className="text-sm font-semibold text-[#f7931e] bg-[#fff8ed] px-3 py-1 rounded-full hover:bg-[#f7931e] hover:text-white transition-all flex items-center gap-1 group"
+                          title="Haz clic para editar la cantidad"
+                        >
+                          <span>{item.quantity} {item.unit}</span>
+                          <Edit2 size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                        <button 
+                          onClick={() => addToDailyInventory(item)}
+                          className="text-[#f7931e] hover:text-[#ff9f3a] hover:bg-[#fff8ed] p-2 rounded-lg transition-all border border-[#f7931e]/30 hover:border-[#f7931e]"
+                          title="Agregar a uso diario (para cocinar hoy)"
+                        >
+                          <Plus size={18} />
+                        </button>
+                        <button 
+                          onClick={() => removeFromTotalInventory(item.id)} 
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-all"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+            {!loadingInventory && totalInventory.length === 0 && (
               <div className="text-center py-8">
                 <Package size={48} className="text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-500">Tu inventario está vacío</p>
+                <p className="text-sm text-gray-400 mt-2">Agrega productos usando el formulario de abajo</p>
               </div>
             )}
           </div>

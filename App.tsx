@@ -1,5 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
+import SplashScreen from './components/SplashScreen';
+import Login from './components/Auth/Login';
+import Register from './components/Auth/Register';
+import OllaSelector from './components/OllaSelector';
 import Header from './components/Header';
 import RecipeGenerator from './components/RecipeGenerator';
 import ExchangeMap from './components/ExchangeMap';
@@ -7,7 +10,10 @@ import BlockchainLedger from './components/BlockchainLedger';
 import Dashboard from './components/Dashboard';
 import DonationManager from './components/DonationManager';
 import PriceRadar from './components/PriceRadar';
+import Profile from './components/Profile';
 import ErrorBoundary from './components/ErrorBoundary';
+import { OllaProvider, useOlla } from './contexts/OllaContext';
+import { useAuth } from './hooks/useAuth';
 import { WHOLESALE_PRICES_CSV, RETAIL_PRICES_CSV } from './data/prices';
 import { IPC_PRICES_CSV } from './data/ipc';
 import { INITIAL_OLLAS } from './constants';
@@ -22,7 +28,12 @@ const initialTransactions: Transaction[] = [
     { id: '3', date: '2024-07-22', type: 'Donación', product: 'Aceite', quantity: 15, unit: 'litros', from: 'Empresa Solidaria', to: 'Olla "Villa Sabor"', hash: 'c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8' },
 ];
 
-const App: React.FC = () => {
+// Componente interno que maneja la lógica de la app
+const AppContent: React.FC = () => {
+  const { user, loading: authLoading, isAuthenticated } = useAuth();
+  const { activeOlla, loading: ollaLoading } = useOlla();
+  const [showSplash, setShowSplash] = useState(true);
+  const [showRegister, setShowRegister] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [priceData, setPriceData] = useState<ProductPrice[]>([]);
   const [ipcData, setIpcData] = useState<IpcData[]>([]);
@@ -298,11 +309,44 @@ const App: React.FC = () => {
         return <BlockchainLedger transactions={transactions} />;
       case 'radar':
         return <PriceRadar priceData={priceData} ipcData={ipcData} />;
+      case 'profile':
+        return <Profile />;
       default:
         return <Dashboard transactions={transactions} ollas={ollas} />;
     }
   };
 
+  // Mostrar SplashScreen primero
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
+
+  // Mostrar loading mientras se verifica autenticación
+  if (authLoading || ollaLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#fff8ed]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#f7931e] border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Si no está autenticado, mostrar Login/Register
+  if (!isAuthenticated || !user) {
+    if (showRegister) {
+      return <Register onSwitchToLogin={() => setShowRegister(false)} />;
+    }
+    return <Login onSwitchToRegister={() => setShowRegister(true)} />;
+  }
+
+  // Si está autenticado pero no tiene olla seleccionada, mostrar selector
+  if (!activeOlla) {
+    return <OllaSelector />;
+  }
+
+  // Si tiene olla seleccionada, mostrar la app normal
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#fff8ed] text-gray-800">
@@ -311,6 +355,17 @@ const App: React.FC = () => {
           {renderContent()}
         </main>
       </div>
+    </ErrorBoundary>
+  );
+};
+
+// Componente principal que envuelve con providers
+const App: React.FC = () => {
+  return (
+    <ErrorBoundary>
+      <OllaProvider>
+        <AppContent />
+      </OllaProvider>
     </ErrorBoundary>
   );
 };
