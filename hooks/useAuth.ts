@@ -56,7 +56,14 @@ export const useAuth = () => {
       if (error) {
         // Manejar diferentes tipos de errores
         let errorMessage = 'Error al iniciar sesión';
-        if (error.message === 'Invalid login credentials') {
+        if (error.status === 401 || error.message?.includes('401')) {
+          errorMessage = 'Error de autenticación. Verifica que las variables de entorno de Supabase estén configuradas correctamente en producción.';
+          console.error('Error 401 - Verifica:', {
+            url: import.meta.env.VITE_SUPABASE_URL ? 'Configurada' : 'FALTANTE',
+            key: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Configurada' : 'FALTANTE',
+            error: error.message
+          });
+        } else if (error.message === 'Invalid login credentials') {
           errorMessage = 'Correo o contraseña incorrectos';
         } else if (error.message?.includes('Email not confirmed')) {
           errorMessage = 'Por favor, verifica tu correo electrónico antes de iniciar sesión';
@@ -92,7 +99,20 @@ export const useAuth = () => {
         }
       });
       
-      if (error) throw error;
+      if (error) {
+        // Manejar errores 401 específicamente
+        if (error.status === 401 || error.message?.includes('401')) {
+          const errorMessage = 'Error de autenticación. Verifica que las variables de entorno de Supabase estén configuradas correctamente en producción.';
+          console.error('Error 401 en signUp - Verifica:', {
+            url: import.meta.env.VITE_SUPABASE_URL ? 'Configurada' : 'FALTANTE',
+            key: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Configurada' : 'FALTANTE',
+            error: error.message
+          });
+          setAuthState(prev => ({ ...prev, loading: false, error: errorMessage }));
+          return { success: false, error: errorMessage };
+        }
+        throw error;
+      }
       
       // Crear perfil del usuario (si la tabla existe)
       if (data.user) {
