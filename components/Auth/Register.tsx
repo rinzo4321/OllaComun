@@ -154,6 +154,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f7931e] focus:border-transparent outline-none transition"
                   placeholder="tu@email.com"
+                  autoComplete="email"
                   disabled={loading}
                 />
               </div>
@@ -176,6 +177,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f7931e] focus:border-transparent outline-none transition"
                   placeholder="••••••••"
+                  autoComplete="new-password"
                   disabled={loading}
                 />
               </div>
@@ -199,6 +201,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f7931e] focus:border-transparent outline-none transition"
                   placeholder="••••••••"
+                  autoComplete="new-password"
                   disabled={loading}
                 />
               </div>

@@ -88,6 +88,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f7931e] focus:border-transparent outline-none transition"
                   placeholder="tu@email.com"
+                  autoComplete="email"
                   disabled={loading}
                 />
               </div>
@@ -110,6 +111,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#f7931e] focus:border-transparent outline-none transition"
                   placeholder="••••••••"
+                  autoComplete="current-password"
                   disabled={loading}
                 />
               </div>
