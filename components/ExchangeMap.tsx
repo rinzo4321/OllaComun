@@ -46,7 +46,8 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
     const [routeDescription, setRouteDescription] = useState<string>('');
     const [isCalculating, setIsCalculating] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [selectedOllaIds, setSelectedOllaIds] = useState<string[]>([]);
+    // Auto-seleccionar todas las ollas por defecto para simplificar
+    const [selectedOllaIds, setSelectedOllaIds] = useState<string[]>(() => ollas.map(o => o.id));
     
     // Estado local para gestión de inventario por olla
     const [localInventoryStatuses, setLocalInventoryStatuses] = useState<OllaInventoryStatus[]>(() => {
@@ -332,9 +333,18 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
         }
     };
 
+    // Actualizar selección cuando se agregan nuevas ollas (solo agregar las nuevas, no resetear)
     useEffect(() => {
-      setSelectedOllaIds(ollas.map(o => o.id));
-    }, [ollas]);
+      if (ollas.length > 0) {
+        setSelectedOllaIds(prev => {
+          const newOllas = ollas.filter(o => !prev.includes(o.id));
+          if (newOllas.length > 0) {
+            return [...prev, ...newOllas.map(o => o.id)];
+          }
+          return prev;
+        });
+      }
+    }, [ollas.length]);
 
     useEffect(() => {
       const availableStartOllas = ollas.filter(o => selectedOllaIds.includes(o.id));
@@ -765,9 +775,43 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                         : 'Ninguno';
                     
                     const icon = surplusList.length > deficitList.length ? surplusIcon : deficitIcon;
+                    const isSelected = selectedOllaIds.includes(olla.id);
                     
-                    L.marker(olla.coords, { icon }).addTo(markersLayer.current)
-                        .bindPopup(`<b>${olla.name || 'Olla'}</b><br>Excedente: ${surplusDisplay}.<br>Déficit: ${deficitDisplay}.`);
+                    // Crear marcador con estilo diferente si está seleccionado
+                    const markerIcon = isSelected 
+                        ? L.divIcon({
+                            className: 'selected-marker',
+                            html: `<div style="background-color: #f7931e; border: 3px solid white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+                                <span style="color: white; font-weight: bold; font-size: 18px;">✓</span>
+                            </div>`,
+                            iconSize: [40, 40],
+                            iconAnchor: [20, 20]
+                          })
+                        : icon;
+                    
+                    const marker = L.marker(olla.coords, { icon: markerIcon }).addTo(markersLayer.current);
+                    
+                    // Agregar popup con información
+                    marker.bindPopup(`
+                        <div style="min-width: 200px;">
+                            <b style="font-size: 14px; color: #f7931e;">${olla.name || 'Olla'}</b>
+                            <div style="margin-top: 8px; font-size: 12px;">
+                                ${surplusList.length > 0 ? `<div style="color: #10b981; margin-bottom: 4px;"><strong>Excedente:</strong> ${surplusDisplay}</div>` : ''}
+                                ${deficitList.length > 0 ? `<div style="color: #ef4444;"><strong>Déficit:</strong> ${deficitDisplay}</div>` : ''}
+                            </div>
+                            <button 
+                                onclick="window.selectOllaFromMap('${olla.id}')" 
+                                style="margin-top: 8px; padding: 4px 12px; background: ${isSelected ? '#ef4444' : '#f7931e'}; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; width: 100%;"
+                            >
+                                ${isSelected ? '✗ Deseleccionar' : '✓ Seleccionar para ruta'}
+                            </button>
+                        </div>
+                    `);
+                    
+                    // Agregar evento de click para seleccionar/deseleccionar
+                    marker.on('click', () => {
+                        handleOllaSelectionChange(olla.id);
+                    });
                 } catch (e) {
                     console.warn('Error al crear marcador para olla:', olla.id, e);
                 }
@@ -775,7 +819,21 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
         } catch (e) {
             console.error('Error al actualizar marcadores:', e);
         }
-    }, [ollas, localInventoryStatuses]);
+    }, [ollas, localInventoryStatuses, selectedOllaIds]);
+    
+    // Exponer función global para usar desde el popup
+    useEffect(() => {
+        (window as any).selectOllaFromMap = (ollaId: string) => {
+            setSelectedOllaIds(prev =>
+                prev.includes(ollaId)
+                    ? prev.filter(id => id !== ollaId)
+                    : [...prev, ollaId]
+            );
+        };
+        return () => {
+            delete (window as any).selectOllaFromMap;
+        };
+    }, []);
 
     useEffect(() => {
         if(routeLayer.current) {
@@ -787,16 +845,52 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                 calculatedRoute.forEach((olla, index) => {
                      const numberIcon = L.divIcon({
                         className: 'route-marker-icon',
-                        html: `<span>${index + 1}</span>`,
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15]
+                        html: `<span style="font-size: 14px; font-weight: bold;">${index + 1}</span>`,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16]
                     });
-                    L.marker(olla.coords, { icon: numberIcon }).addTo(routeLayer.current)
-                        .bindPopup(`<b>#${index+1}: ${olla.name}</b>`);
+                    const routeMarker = L.marker(olla.coords, { icon: numberIcon, zIndexOffset: 1000 }).addTo(routeLayer.current);
+                    
+                    // Obtener información del inventario para el popup
+                    const inventoryStatus = localInventoryStatuses.find(s => s.ollaId === olla.id);
+                    const surplusList = inventoryStatus?.surplus?.filter(s => s && s.product && s.quantity > 0) || [];
+                    const deficitList = inventoryStatus?.deficit?.filter(d => d && d.product && d.quantity > 0) || [];
+                    
+                    let popupContent = `<div style="min-width: 220px;">
+                        <div style="background: #f7931e; color: white; padding: 8px; border-radius: 4px 4px 0 0; margin: -10px -10px 8px -10px;">
+                            <b style="font-size: 16px;">Parada #${index + 1}: ${olla.name}</b>
+                        </div>`;
+                    
+                    if (index === 0) {
+                        popupContent += `<div style="background: #dbeafe; padding: 6px; border-radius: 4px; margin-bottom: 8px; font-size: 12px;">
+                            🚩 <strong>Punto de partida</strong>
+                        </div>`;
+                    }
+                    
+                    if (surplusList.length > 0) {
+                        popupContent += `<div style="margin-bottom: 8px;">
+                            <strong style="color: #10b981; font-size: 12px;">📦 Excedentes:</strong>
+                            <ul style="margin: 4px 0; padding-left: 16px; font-size: 11px;">
+                                ${surplusList.map(s => `<li>${s.product} (${s.quantity} ${s.unit})</li>`).join('')}
+                            </ul>
+                        </div>`;
+                    }
+                    
+                    if (deficitList.length > 0) {
+                        popupContent += `<div>
+                            <strong style="color: #ef4444; font-size: 12px;">⚠️ Faltantes:</strong>
+                            <ul style="margin: 4px 0; padding-left: 16px; font-size: 11px;">
+                                ${deficitList.map(d => `<li>${d.product} (${d.quantity} ${d.unit})</li>`).join('')}
+                            </ul>
+                        </div>`;
+                    }
+                    
+                    popupContent += `</div>`;
+                    routeMarker.bindPopup(popupContent);
                 });
             }
         }
-    }, [calculatedRoute]);
+    }, [calculatedRoute, localInventoryStatuses]);
 
     const availableStartOllas = ollas.filter(o => selectedOllaIds.includes(o.id));
 
@@ -997,41 +1091,33 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                         )}
                     </div>
 
-                    {/* Planificador de Ruta */}
+                    {/* Planificador de Ruta - Simplificado */}
                     <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200 shadow-sm space-y-3">
-                        <h3 className="font-bold text-base flex items-center gap-2 text-gray-900">
-                            <Truck size={18} className="text-[#f7931e]" />
-                            Planificador de Ruta
-                        </h3>
-
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                                <label className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-                                    <ListChecks size={14} className="text-[#f7931e]" />
-                                    Ollas a Incluir
-                                </label>
-                                <button onClick={toggleSelectAllOllas} className="text-xs font-bold text-[#f7931e] hover:underline">
-                                    {selectedOllaIds.length === ollas.length ? 'Ninguna' : 'Todas'}
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-bold text-base flex items-center gap-2 text-gray-900">
+                                <Truck size={18} className="text-[#f7931e]" />
+                                Planificador de Ruta
+                            </h3>
+                            {calculatedRoute && (
+                                <button
+                                    onClick={() => {
+                                        setCalculatedRoute(null);
+                                        setRouteDescription('');
+                                    }}
+                                    className="text-xs text-red-600 hover:text-red-700 font-medium"
+                                    title="Limpiar ruta"
+                                >
+                                    <X size={14} />
                                 </button>
-                            </div>
-                            <div className="max-h-32 overflow-y-auto space-y-1.5 pr-1">
-                              {ollas.map(olla => (
-                                  <div key={olla.id} className="flex items-center bg-white p-1.5 rounded-md">
-                                      <input
-                                          type="checkbox"
-                                          id={`olla-checkbox-${olla.id}`}
-                                          checked={selectedOllaIds.includes(olla.id)}
-                                          onChange={() => handleOllaSelectionChange(olla.id)}
-                                          className="h-3.5 w-3.5 rounded border-gray-300 text-[#f7931e] focus:ring-[#f7931e] cursor-pointer"
-                                      />
-                                      <label htmlFor={`olla-checkbox-${olla.id}`} className="ml-2 block text-xs font-medium text-gray-800 cursor-pointer truncate">
-                                          {olla.name}
-                                      </label>
-                                  </div>
-                              ))}
-                            </div>
+                            )}
                         </div>
-                        
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-2">
+                            <p className="text-xs text-blue-700">
+                                <strong>💡 Tip:</strong> Haz clic en los marcadores del mapa para seleccionar/deseleccionar ollas, o usa los checkboxes abajo.
+                            </p>
+                        </div>
+
                         <div>
                           <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                               Punto de Partida
@@ -1044,6 +1130,36 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                           >
                               {availableStartOllas.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                           </select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                                <label className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                                    <ListChecks size={14} className="text-[#f7931e]" />
+                                    Ollas Seleccionadas ({selectedOllaIds.length}/{ollas.length})
+                                </label>
+                                <button onClick={toggleSelectAllOllas} className="text-xs font-bold text-[#f7931e] hover:underline">
+                                    {selectedOllaIds.length === ollas.length ? 'Deseleccionar todas' : 'Seleccionar todas'}
+                                </button>
+                            </div>
+                            <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                              {ollas.map(olla => (
+                                  <div key={olla.id} className={`flex items-center p-1.5 rounded-md transition-colors ${
+                                      selectedOllaIds.includes(olla.id) ? 'bg-[#fff8ed] border border-[#f7931e]/30' : 'bg-white'
+                                  }`}>
+                                      <input
+                                          type="checkbox"
+                                          id={`olla-checkbox-${olla.id}`}
+                                          checked={selectedOllaIds.includes(olla.id)}
+                                          onChange={() => handleOllaSelectionChange(olla.id)}
+                                          className="h-3.5 w-3.5 rounded border-gray-300 text-[#f7931e] focus:ring-[#f7931e] cursor-pointer"
+                                      />
+                                      <label htmlFor={`olla-checkbox-${olla.id}`} className="ml-2 block text-xs font-medium text-gray-800 cursor-pointer truncate flex-1">
+                                          {olla.name}
+                                      </label>
+                                  </div>
+                              ))}
+                            </div>
                         </div>
 
                         <button 
@@ -1059,10 +1175,16 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                             ) : (
                                 <>
                                     <Navigation size={18} />
-                                    Calcular Ruta
+                                    {calculatedRoute ? 'Recalcular Ruta' : 'Calcular Ruta'}
                                 </>
                             )}
                         </button>
+                        
+                        {selectedOllaIds.length < 2 && (
+                            <p className="text-xs text-amber-600 text-center">
+                                Selecciona al menos 2 ollas para calcular una ruta
+                            </p>
+                        )}
                     </div>
                 </div>
                 
@@ -1071,14 +1193,23 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                      <div ref={mapContainer} style={{ height: '70vh', borderRadius: '8px' }} className="w-full shadow-lg" />
                      <style>{`
                         .route-marker-icon {
-                            background-color: #f4a949;
-                            border: 2px solid #fff;
+                            background-color: #f7931e;
+                            border: 3px solid #fff;
                             border-radius: 50%;
                             color: white;
                             font-weight: bold;
                             text-align: center;
-                            line-height: 26px;
-                            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                            line-height: 28px;
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+                            width: 32px;
+                            height: 32px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        }
+                        .selected-marker {
+                            background: transparent !important;
+                            border: none !important;
                         }
                     `}</style>
                 </div>
