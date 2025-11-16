@@ -4,10 +4,8 @@ import { GeneratedRecipe, InventoryItem, ProductPrice, Substitute } from "../typ
 // Obtener la API Key de las variables de entorno de Vite
 const getApiKey = (): string | undefined => {
   // Vite expone automáticamente variables que empiezan con VITE_
-  // También verifica process.env que se define en vite.config.ts
+  // En el navegador solo podemos usar import.meta.env, no process.env
   return import.meta.env.VITE_GEMINI_API_KEY || 
-         (process.env as any)?.GEMINI_API_KEY ||
-         (process.env as any)?.API_KEY ||
          (window as any).__GEMINI_API_KEY__;
 };
 
@@ -60,12 +58,21 @@ const recipeSchema = {
 
 export const generateRecipe = async (inventory: InventoryItem[]): Promise<GeneratedRecipe> => {
   const ingredientsList = inventory.map(item => `${item.quantity} ${item.unit} de ${item.name}`).join(', ');
+  const ingredientNames = inventory.map(item => item.name.toLowerCase()).join(', ');
 
   const prompt = `
     Eres un chef experto especializado en crear comidas nutritivas y de bajo costo para ollas comunes peruanas.
-    Basándote en los siguientes ingredientes disponibles: ${ingredientsList}, genera una receta completa.
-    La receta debe ser sencilla de preparar en grandes cantidades, económica y culturalmente apropiada para Perú.
-    Prioriza el uso de los ingredientes listados. Si es necesario, puedes agregar ingredientes básicos y económicos como sal, aceite, o ajos.
+    
+    INSTRUCCIONES CRÍTICAS:
+    1. SOLO puedes usar los siguientes ingredientes disponibles: ${ingredientsList}
+    2. NO agregues ingredientes que NO estén en esta lista (como ajos, sal, aceite, etc.) a menos que estén explícitamente listados
+    3. Si necesitas condimentos básicos, úsalos SOLO si están en la lista: ${ingredientNames}
+    4. Las cantidades de cada ingrediente en la receta deben ser proporcionales a las cantidades disponibles en el inventario
+    5. La receta debe ser sencilla de preparar en grandes cantidades, económica y culturalmente apropiada para Perú
+    6. Calcula las porciones basándote en las cantidades disponibles (aproximadamente 5 personas por kg de ingredientes totales)
+    
+    IMPORTANTE: Cada ingrediente en la receta DEBE estar en la lista de ingredientes disponibles. No inventes ingredientes adicionales.
+    
     Responde ÚNICAMENTE con un objeto JSON que se ajuste estrictamente al esquema proporcionado.
   `;
 

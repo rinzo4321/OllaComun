@@ -1084,210 +1084,6 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                 </div>
             </div>
 
-            {/* Inventario por Olla - Debajo del mapa, diseño horizontal */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-                <div className="flex items-center gap-2 mb-4">
-                    <Package className="text-[#f7931e]" size={20} />
-                    <h3 className="text-lg font-bold text-gray-900">Inventario por Olla</h3>
-                    <span className="text-xs text-gray-500 ml-auto">Gestiona excedentes y faltantes</span>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {localInventoryStatuses && localInventoryStatuses.length > 0 ? localInventoryStatuses.map(status => {
-                        if (!status || !status.ollaId) return null;
-                        
-                        const newProductInput = newProductsInputs[status.ollaId]?.product || '';
-                        const selectedType = newProductsInputs[status.ollaId]?.type || null;
-                        
-                        // Combinar todos los productos con validación
-                        const deficitList = Array.isArray(status.deficit) ? status.deficit : [];
-                        const surplusList = Array.isArray(status.surplus) ? status.surplus : [];
-                        
-                        const allProducts = [
-                            ...deficitList.filter(d => d && d.product).map(d => ({ ...d, type: 'deficit' as const })),
-                            ...surplusList.filter(s => s && s.product).map(s => ({ ...s, type: 'surplus' as const }))
-                        ];
-                        
-                        return (
-                            <div key={status.ollaId} className="bg-gradient-to-br from-gray-50 to-white rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                                <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                                    <MapPin size={14} className="text-[#f7931e]" />
-                                    <span className="truncate">{status.ollaName}</span>
-                                </h4>
-                                
-                                {/* Lista de productos */}
-                                {allProducts.length > 0 && (
-                                    <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
-                                        {allProducts.map((item, idx) => {
-                                            if (!item || !item.product) return null;
-                                            
-                                            return (
-                                                <div 
-                                                    key={`${item.type}-${idx}-${item.product}`} 
-                                                    className={`flex items-center gap-2 p-2 rounded-lg text-xs ${
-                                                        item.type === 'deficit' 
-                                                            ? 'bg-red-50 border border-red-100' 
-                                                            : 'bg-green-50 border border-green-100'
-                                                    }`}
-                                                >
-                                                    <input
-                                                        type="number"
-                                                        value={item.quantity || ''}
-                                                        onChange={(e) => {
-                                                            try {
-                                                                const qty = parseFloat(e.target.value) || 0;
-                                                                if (qty > 0) {
-                                                                    updateOllaItem(status.ollaId, item.type, item.product, qty);
-                                                                }
-                                                            } catch (e) {
-                                                                console.warn('Error al actualizar cantidad:', e);
-                                                            }
-                                                        }}
-                                                        onBlur={(e) => {
-                                                            try {
-                                                                const qty = parseFloat(e.target.value) || 0;
-                                                                if (qty === 0) {
-                                                                    removeOllaItem(status.ollaId, item.type, item.product);
-                                                                }
-                                                            } catch (e) {
-                                                                console.warn('Error al procesar blur:', e);
-                                                            }
-                                                        }}
-                                                        min="0"
-                                                        step="0.1"
-                                                        placeholder="0"
-                                                        className={`w-16 p-1.5 border rounded text-xs font-medium ${
-                                                            item.type === 'deficit' 
-                                                                ? 'border-red-200 bg-white focus:ring-red-300' 
-                                                                : 'border-green-200 bg-white focus:ring-green-300'
-                                                        } focus:ring-2`}
-                                                    />
-                                                    <span className="flex-1 capitalize text-gray-700 font-medium truncate">
-                                                        {item.product}
-                                                    </span>
-                                                    <span className={`text-[10px] px-2 py-0.5 rounded font-semibold whitespace-nowrap ${
-                                                        item.type === 'deficit'
-                                                            ? 'bg-red-200 text-red-700'
-                                                            : 'bg-green-200 text-green-700'
-                                                    }`}>
-                                                        {item.type === 'deficit' ? 'Falta' : 'Sobra'}
-                                                    </span>
-                                                    <button
-                                                        onClick={() => {
-                                                            try {
-                                                                removeOllaItem(status.ollaId, item.type, item.product);
-                                                            } catch (e) {
-                                                                console.warn('Error al eliminar item:', e);
-                                                            }
-                                                        }}
-                                                        className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                                                        title="Eliminar"
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                                
-                                {/* Input para agregar */}
-                                <div className="space-y-2">
-                                    <input
-                                        type="text"
-                                        value={newProductInput}
-                                        onChange={(e) => setNewProductsInputs(prev => ({
-                                            ...prev,
-                                            [status.ollaId]: { 
-                                                ...prev[status.ollaId], 
-                                                product: e.target.value,
-                                                type: prev[status.ollaId]?.type || null
-                                            }
-                                        }))}
-                                        onKeyPress={(e) => {
-                                            if (e.key === 'Enter' && newProductInput.trim()) {
-                                                const typeToUse = selectedType || 'deficit';
-                                                addOllaItem(status.ollaId, typeToUse, newProductInput.trim());
-                                                setNewProductsInputs(prev => ({
-                                                    ...prev,
-                                                    [status.ollaId]: { product: '', type: null }
-                                                }));
-                                            }
-                                        }}
-                                        placeholder="Escribe el producto..."
-                                        className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e]"
-                                    />
-                                    
-                                    {/* Botones */}
-                                    <div className="flex gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                if (newProductInput.trim()) {
-                                                    addOllaItem(status.ollaId, 'deficit', newProductInput.trim());
-                                                    setNewProductsInputs(prev => ({
-                                                        ...prev,
-                                                        [status.ollaId]: { product: '', type: null }
-                                                    }));
-                                                } else {
-                                                    setNewProductsInputs(prev => ({
-                                                        ...prev,
-                                                        [status.ollaId]: { 
-                                                            ...prev[status.ollaId], 
-                                                            type: prev[status.ollaId]?.type === 'deficit' ? null : 'deficit'
-                                                        }
-                                                    }));
-                                                }
-                                            }}
-                                            className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
-                                                selectedType === 'deficit'
-                                                    ? 'bg-red-500 text-white shadow-md hover:bg-red-600'
-                                                    : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
-                                            }`}
-                                        >
-                                            <AlertCircle size={12} />
-                                            Falta
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                if (newProductInput.trim()) {
-                                                    addOllaItem(status.ollaId, 'surplus', newProductInput.trim());
-                                                    setNewProductsInputs(prev => ({
-                                                        ...prev,
-                                                        [status.ollaId]: { product: '', type: null }
-                                                    }));
-                                                } else {
-                                                    setNewProductsInputs(prev => ({
-                                                        ...prev,
-                                                        [status.ollaId]: { 
-                                                            ...prev[status.ollaId], 
-                                                            type: prev[status.ollaId]?.type === 'surplus' ? null : 'surplus'
-                                                        }
-                                                    }));
-                                                }
-                                            }}
-                                            className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
-                                                selectedType === 'surplus'
-                                                    ? 'bg-green-500 text-white shadow-md hover:bg-green-600'
-                                                    : 'bg-green-50 text-green-600 border border-green-200 hover:bg-green-100'
-                                            }`}
-                                        >
-                                            <TrendingUp size={12} />
-                                            Sobra
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    }).filter(Boolean) : (
-                        <div className="col-span-full text-center py-8 text-gray-500">
-                            <p>No hay inventarios disponibles</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-
             {/* Mensajes de error y ruta */}
             {error && (
                 <div className="text-red-700 bg-red-50 p-4 rounded-lg border border-red-200 flex items-start gap-3">
@@ -1311,7 +1107,71 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                                 <span>Calculando la ruta más eficiente...</span>
                             </div>
                         )}
-                        {routeDescription && <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: routeDescription }} />}
+                        {routeDescription && (
+                            <>
+                                <div className="prose max-w-none mb-4" dangerouslySetInnerHTML={{ __html: routeDescription }} />
+                                
+                                {/* Información de Inventario por Olla en la Ruta */}
+                                {selectedOllaIds.length > 0 && localInventoryStatuses.length > 0 && (
+                                    <div className="mt-6 pt-6 border-t border-gray-200">
+                                        <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                            <Package size={18} className="text-[#f7931e]" />
+                                            Inventario de Ollas en la Ruta
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {selectedOllaIds.map(ollaId => {
+                                                const status = localInventoryStatuses.find(s => s.ollaId === ollaId);
+                                                if (!status) return null;
+                                                
+                                                const deficitList = Array.isArray(status.deficit) ? status.deficit.filter(d => d && d.product && d.quantity > 0) : [];
+                                                const surplusList = Array.isArray(status.surplus) ? status.surplus.filter(s => s && s.product && s.quantity > 0) : [];
+                                                
+                                                if (deficitList.length === 0 && surplusList.length === 0) return null;
+                                                
+                                                return (
+                                                    <div key={ollaId} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                                        <h5 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                                                            <MapPin size={14} className="text-[#f7931e]" />
+                                                            {status.ollaName}
+                                                        </h5>
+                                                        
+                                                        {deficitList.length > 0 && (
+                                                            <div className="mb-3">
+                                                                <p className="text-xs font-semibold text-red-700 mb-1">Faltantes:</p>
+                                                                <ul className="space-y-1">
+                                                                    {deficitList.map((item, idx) => (
+                                                                        <li key={idx} className="text-xs text-red-600 flex items-center gap-1">
+                                                                            <span>•</span>
+                                                                            <span className="capitalize">{item.product}</span>
+                                                                            <span className="font-medium">({item.quantity} {item.unit})</span>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                        
+                                                        {surplusList.length > 0 && (
+                                                            <div>
+                                                                <p className="text-xs font-semibold text-green-700 mb-1">Sobrantes:</p>
+                                                                <ul className="space-y-1">
+                                                                    {surplusList.map((item, idx) => (
+                                                                        <li key={idx} className="text-xs text-green-600 flex items-center gap-1">
+                                                                            <span>•</span>
+                                                                            <span className="capitalize">{item.product}</span>
+                                                                            <span className="font-medium">({item.quantity} {item.unit})</span>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </Card>
                 </div>
             )}

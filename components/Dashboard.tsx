@@ -178,7 +178,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ollas }) => {
                     }, {} as Record<string, number>);
 
                 const topProducts = Object.entries(productsData)
-                    .sort(([, a], [, b]) => b - a)
+                    .sort(([, a], [, b]) => (b as number) - (a as number))
                     .slice(0, 5);
 
                 const productsChart = new Chart(productsChartRef.current, {

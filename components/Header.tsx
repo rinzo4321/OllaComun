@@ -55,7 +55,10 @@ const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
             </div>
           </div>
           <nav className="w-full sm:w-auto bg-gradient-to-r from-gray-50 via-white to-gray-50 p-2 rounded-2xl flex flex-wrap items-center justify-center gap-2 border border-[#f7931e]/20 shadow-md">
-            {navItems.map(item => <NavButton key={item.id} id={item.id} label={item.label} Icon={item.Icon} />)}
+            {navItems.map(item => {
+              const { id, label, Icon } = item;
+              return <NavButton key={id} id={id} label={label} Icon={Icon} />;
+            })}
           </nav>
         </div>
       </div>

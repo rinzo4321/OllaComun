@@ -26,19 +26,100 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [priceData, setPriceData] = useState<ProductPrice[]>([]);
   const [ipcData, setIpcData] = useState<IpcData[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
-  const [ollas, setOllas] = useState<OllaLocation[]>(INITIAL_OLLAS);
+  
+  // Transacciones con persistencia en localStorage
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = localStorage.getItem('transactions');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error al cargar transacciones desde localStorage:', e);
+    }
+    return initialTransactions;
+  });
+
+  // Ollas con persistencia en localStorage
+  const [ollas, setOllas] = useState<OllaLocation[]>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = localStorage.getItem('ollas');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error al cargar ollas desde localStorage:', e);
+    }
+    return INITIAL_OLLAS;
+  });
+
   const [isLoading, setIsLoading] = useState(true);
   
-  // Estado compartido para inventario por olla (conecta RecipeGenerator con ExchangeMap)
-  const [ollaInventoryStatuses, setOllaInventoryStatuses] = useState<OllaInventoryStatus[]>(
-    INITIAL_OLLAS.map(olla => ({
+  // Estado compartido para inventario por olla (conecta RecipeGenerator con ExchangeMap) - con persistencia
+  const [ollaInventoryStatuses, setOllaInventoryStatuses] = useState<OllaInventoryStatus[]>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = localStorage.getItem('ollaInventoryStatuses');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error al cargar inventario de ollas desde localStorage:', e);
+    }
+    return INITIAL_OLLAS.map(olla => ({
       ollaId: olla.id,
       ollaName: olla.name,
       surplus: olla.surplus,
       deficit: olla.deficit
-    }))
-  );
+    }));
+  });
+
+  // Persistir transacciones cuando cambien
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('transactions', JSON.stringify(transactions));
+      }
+    } catch (e) {
+      console.warn('Error al guardar transacciones en localStorage:', e);
+    }
+  }, [transactions]);
+
+  // Persistir ollas cuando cambien
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('ollas', JSON.stringify(ollas));
+      }
+    } catch (e) {
+      console.warn('Error al guardar ollas en localStorage:', e);
+    }
+  }, [ollas]);
+
+  // Persistir inventario de ollas cuando cambie
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('ollaInventoryStatuses', JSON.stringify(ollaInventoryStatuses));
+      }
+    } catch (e) {
+      console.warn('Error al guardar inventario de ollas en localStorage:', e);
+    }
+  }, [ollaInventoryStatuses]);
 
   useEffect(() => {
     // Esperar a que PapaParse esté disponible

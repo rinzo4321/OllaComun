@@ -4,7 +4,7 @@ import { generateRecipe, recommendSubstitutes } from '../services/geminiService'
 import { optimizeSingleRecipe, OptimizationResult } from '../services/optimizationService';
 import Card from './shared/Card';
 import Spinner from './shared/Spinner';
-import { Plus, Trash2, ChefHat, Package, DollarSign, Users, ShoppingCart, AlertCircle, ArrowRight, Calendar, Minus, MapPin, Zap } from 'lucide-react';
+import { Plus, Trash2, ChefHat, Package, DollarSign, Users, ShoppingCart, AlertCircle, ArrowRight, Calendar, Minus, MapPin, Zap, X, TrendingUp } from 'lucide-react';
 
 interface RecipeGeneratorProps {
   priceData: ProductPrice[];
@@ -21,15 +21,68 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
   ollaInventoryStatuses = [],
   updateOllaInventory
 }) => {
-  // Inventario total (almacén)
-  const [totalInventory, setTotalInventory] = useState<InventoryItem[]>([
-    { id: '1', name: 'papa', quantity: 10, unit: 'kg' },
-    { id: '2', name: 'arroz', quantity: 5, unit: 'kg' },
-    { id: '3', name: 'pollo', quantity: 3, unit: 'kg' },
-  ]);
+  // Inventario total (almacén) - con persistencia en localStorage
+  const [totalInventory, setTotalInventory] = useState<InventoryItem[]>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = localStorage.getItem('totalInventory');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error al cargar inventario total desde localStorage:', e);
+    }
+    // Valores por defecto
+    return [
+      { id: '1', name: 'papa', quantity: 10, unit: 'kg' },
+      { id: '2', name: 'arroz', quantity: 5, unit: 'kg' },
+      { id: '3', name: 'pollo', quantity: 3, unit: 'kg' },
+    ];
+  });
 
-  // Inventario diario (lo que se va a usar hoy)
-  const [dailyInventory, setDailyInventory] = useState<DailyInventoryItem[]>([]);
+  // Inventario diario (lo que se va a usar hoy) - con persistencia en localStorage
+  const [dailyInventory, setDailyInventory] = useState<DailyInventoryItem[]>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = localStorage.getItem('dailyInventory');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            return parsed;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error al cargar inventario diario desde localStorage:', e);
+    }
+    return [];
+  });
+
+  // Persistir inventario total cuando cambie
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('totalInventory', JSON.stringify(totalInventory));
+      }
+    } catch (e) {
+      console.warn('Error al guardar inventario total en localStorage:', e);
+    }
+  }, [totalInventory]);
+
+  // Persistir inventario diario cuando cambie
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem('dailyInventory', JSON.stringify(dailyInventory));
+      }
+    } catch (e) {
+      console.warn('Error al guardar inventario diario en localStorage:', e);
+    }
+  }, [dailyInventory]);
 
   // Estado para nueva receta
   const [targetPeople, setTargetPeople] = useState<number>(25);
@@ -70,6 +123,30 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
   const [peoplePerDay, setPeoplePerDay] = useState<number>(25);
 
   const productNames = useMemo(() => priceData.map(p => p.name), [priceData]);
+
+  // Función helper para comparar nombres de ingredientes de forma flexible
+  const matchIngredientName = (name1: string, name2: string): boolean => {
+    const n1 = name1.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const n2 = name2.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    
+    // Comparación exacta
+    if (n1 === n2) return true;
+    
+    // Una contiene a la otra
+    if (n1.includes(n2) || n2.includes(n1)) return true;
+    
+    // Comparar palabras clave comunes
+    const keywords1 = n1.split(/\s+/).filter(w => w.length > 2);
+    const keywords2 = n2.split(/\s+/).filter(w => w.length > 2);
+    
+    // Si comparten al menos una palabra clave significativa
+    return keywords1.some(k1 => keywords2.some(k2 => k1 === k2 || k1.includes(k2) || k2.includes(k1)));
+  };
+
+  // Función helper para encontrar un ingrediente en el inventario
+  const findInventoryItem = (ingredientName: string, inventory: (InventoryItem | DailyInventoryItem)[]): (InventoryItem | DailyInventoryItem) | null => {
+    return inventory.find(item => matchIngredientName(item.name, ingredientName)) || null;
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -141,6 +218,24 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
     }));
   };
 
+  // Función helper para normalizar unidades a kg
+  const normalizeToKg = (quantity: number, unit: string): number => {
+    const unitLower = unit.toLowerCase().trim();
+    if (unitLower === 'kg' || unitLower === 'kilogramo' || unitLower === 'kilogramos') {
+      return quantity;
+    }
+    if (unitLower === 'g' || unitLower === 'gramo' || unitLower === 'gramos' || unitLower === 'grams') {
+      return quantity / 1000;
+    }
+    if (unitLower === 'litros' || unitLower === 'litro' || unitLower === 'l') {
+      return quantity; // Asumimos densidad aproximada de 1 kg/L
+    }
+    if (unitLower === 'unidades' || unitLower === 'unidad' || unitLower === 'un') {
+      return quantity * 0.1; // Estimación: 100g por unidad
+    }
+    return quantity; // Por defecto, asumimos kg
+  };
+
   const predictPrice = (baseProduct: ProductPrice, targetDate: Date, ipcData: IpcData[]): number => {
     if (ipcData.length === 0) return baseProduct.price;
     
@@ -187,63 +282,160 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
     }, 0);
   }, [priceData, ipcData]);
 
-  // Calcular cuántas personas alcanza con el inventario diario
+  // Calcular cuántas personas alcanza con el inventario diario (o total si no hay diario)
   const calculatePeopleCapacity = useMemo(() => {
-    if (!generatedRecipe || dailyInventory.length === 0) return null;
+    if (!generatedRecipe) return null;
+
+    // Usar inventario diario si existe, sino usar inventario total
+    const inventoryToUse = dailyInventory.length > 0 ? dailyInventory : totalInventory;
+    if (inventoryToUse.length === 0) return null;
 
     const recipeServings = generatedRecipe.servings || 25;
     let minMultiplier = Infinity;
+    let allIngredientsFound = true;
+
+    // Función helper para comparar nombres (local para evitar dependencias)
+    const matchName = (name1: string, name2: string): boolean => {
+      const n1 = name1.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const n2 = name2.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (n1 === n2) return true;
+      if (n1.includes(n2) || n2.includes(n1)) return true;
+      const keywords1 = n1.split(/\s+/).filter(w => w.length > 2);
+      const keywords2 = n2.split(/\s+/).filter(w => w.length > 2);
+      return keywords1.some(k1 => keywords2.some(k2 => k1 === k2 || k1.includes(k2) || k2.includes(k1)));
+    };
+
+    // Función helper para normalizar unidades (local para evitar dependencias)
+    const normalizeToKgLocal = (quantity: number, unit: string): number => {
+      const unitLower = unit.toLowerCase().trim();
+      if (unitLower === 'kg' || unitLower === 'kilogramo' || unitLower === 'kilogramos') {
+        return quantity;
+      }
+      if (unitLower === 'g' || unitLower === 'gramo' || unitLower === 'gramos' || unitLower === 'grams') {
+        return quantity / 1000;
+      }
+      if (unitLower === 'litros' || unitLower === 'litro' || unitLower === 'l') {
+        return quantity; // Asumimos densidad aproximada de 1 kg/L
+      }
+      if (unitLower === 'unidades' || unitLower === 'unidad' || unitLower === 'un') {
+        return quantity * 0.1; // Estimación: 100g por unidad
+      }
+      return quantity; // Por defecto, asumimos kg
+    };
+
+    const findItem = (ingredientName: string, inventory: (InventoryItem | DailyInventoryItem)[]): (InventoryItem | DailyInventoryItem) | null => {
+      return inventory.find(item => matchName(item.name, ingredientName)) || null;
+    };
 
     generatedRecipe.ingredients.forEach(recipeIng => {
-      const dailyItem = dailyInventory.find(di => 
-        di.name.toLowerCase().includes(recipeIng.name.toLowerCase()) ||
-        recipeIng.name.toLowerCase().includes(di.name.toLowerCase())
-      );
+      const inventoryItem = findItem(recipeIng.name, inventoryToUse);
 
-      if (dailyItem) {
+      if (inventoryItem) {
         // Convertir unidades a kg para comparar
-        const recipeQtyInKg = (recipeIng.unit === 'g' || recipeIng.unit === 'grams') 
-          ? recipeIng.quantity / 1000 
-          : recipeIng.quantity;
-        const dailyQtyInKg = (dailyItem.unit === 'g' || dailyItem.unit === 'grams')
-          ? dailyItem.quantity / 1000
-          : dailyItem.quantity;
+        const recipeQtyInKg = normalizeToKgLocal(recipeIng.quantity, recipeIng.unit);
+        const inventoryQtyInKg = normalizeToKgLocal(inventoryItem.quantity, inventoryItem.unit);
 
         if (recipeQtyInKg > 0) {
-          const multiplier = dailyQtyInKg / recipeQtyInKg;
+          const multiplier = inventoryQtyInKg / recipeQtyInKg;
           minMultiplier = Math.min(minMultiplier, multiplier);
         }
       } else {
-        minMultiplier = 0;
+        // Si no encontramos el ingrediente, no podemos hacer la receta
+        allIngredientsFound = false;
       }
     });
 
-    return minMultiplier === Infinity ? 0 : Math.floor(minMultiplier * recipeServings);
-  }, [generatedRecipe, dailyInventory]);
+    // Si no encontramos todos los ingredientes, retornar 0
+    if (!allIngredientsFound || minMultiplier === Infinity) {
+      return 0;
+    }
 
-  // Calcular qué falta comprar
+    return Math.floor(minMultiplier * recipeServings);
+  }, [generatedRecipe, dailyInventory, totalInventory]);
+
+  // Calcular qué falta comprar y agregar faltantes al inventario total automáticamente
   const calculateMissingItems = useMemo(() => {
     if (!generatedRecipe || !targetPeople) return [];
 
+    // Funciones helper locales para evitar dependencias
+    const matchNameLocal = (name1: string, name2: string): boolean => {
+      const n1 = name1.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const n2 = name2.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (n1 === n2) return true;
+      if (n1.includes(n2) || n2.includes(n1)) return true;
+      const keywords1 = n1.split(/\s+/).filter(w => w.length > 2);
+      const keywords2 = n2.split(/\s+/).filter(w => w.length > 2);
+      return keywords1.some(k1 => keywords2.some(k2 => k1 === k2 || k1.includes(k2) || k2.includes(k1)));
+    };
+
+    const normalizeToKgLocal = (quantity: number, unit: string): number => {
+      const unitLower = unit.toLowerCase().trim();
+      if (unitLower === 'kg' || unitLower === 'kilogramo' || unitLower === 'kilogramos') {
+        return quantity;
+      }
+      if (unitLower === 'g' || unitLower === 'gramo' || unitLower === 'gramos' || unitLower === 'grams') {
+        return quantity / 1000;
+      }
+      if (unitLower === 'litros' || unitLower === 'litro' || unitLower === 'l') {
+        return quantity;
+      }
+      if (unitLower === 'unidades' || unitLower === 'unidad' || unitLower === 'un') {
+        return quantity * 0.1;
+      }
+      return quantity;
+    };
+
+    const findItemLocal = (ingredientName: string, inventory: (InventoryItem | DailyInventoryItem)[]): (InventoryItem | DailyInventoryItem) | null => {
+      return inventory.find(item => matchNameLocal(item.name, ingredientName)) || null;
+    };
+
+    const predictPriceLocal = (baseProduct: ProductPrice, targetDate: Date, ipcDataLocal: IpcData[]): number => {
+      if (ipcDataLocal.length === 0) return baseProduct.price;
+      const basePrice = baseProduct.price;
+      const baseDate = new Date('2025-07-30');
+      const finalDate = targetDate;
+      if (finalDate <= baseDate) {
+        return basePrice;
+      }
+      let currentPrice = basePrice;
+      const last12MonthsIpc = ipcDataLocal.slice(-12);
+      const averageFutureIpc = last12MonthsIpc.length > 0
+        ? last12MonthsIpc.reduce((acc, item) => acc + item.variation, 0) / last12MonthsIpc.length
+        : 0;
+      let currentDate = new Date(baseDate);
+      while (currentDate < finalDate) {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        const ipcEntry = ipcDataLocal.find(ipc => 
+          ipc.date.getFullYear() === currentDate.getFullYear() &&
+          ipc.date.getMonth() === currentDate.getMonth()
+        );
+        const variation = ipcEntry ? ipcEntry.variation : averageFutureIpc;
+        currentPrice *= (1 + variation);
+      }
+      return currentPrice;
+    };
+
     const recipeServings = generatedRecipe.servings || 25;
     const multiplier = targetPeople / recipeServings;
+    const inventoryToUse = dailyInventory.length > 0 ? dailyInventory : totalInventory;
 
     return generatedRecipe.ingredients.map(recipeIng => {
-      const dailyItem = dailyInventory.find(di => 
-        di.name.toLowerCase().includes(recipeIng.name.toLowerCase()) ||
-        recipeIng.name.toLowerCase().includes(di.name.toLowerCase())
-      );
+      const inventoryItem = findItemLocal(recipeIng.name, inventoryToUse);
 
       const requiredQty = recipeIng.quantity * multiplier;
-      const availableQty = dailyItem ? dailyItem.quantity : 0;
-      const missingQty = Math.max(0, requiredQty - availableQty);
+      const availableQty = inventoryItem ? inventoryItem.quantity : 0;
+      
+      // Normalizar unidades para comparar correctamente
+      const requiredQtyInKg = normalizeToKgLocal(requiredQty, recipeIng.unit);
+      const availableQtyInKg = inventoryItem ? normalizeToKgLocal(availableQty, inventoryItem.unit) : 0;
+      const missingQtyInKg = Math.max(0, requiredQtyInKg - availableQtyInKg);
+      const missingQty = (recipeIng.unit === 'g' || recipeIng.unit === 'grams') 
+        ? missingQtyInKg * 1000 
+        : missingQtyInKg;
 
       if (missingQty > 0) {
-        const priceInfo = priceData.find(p => 
-          p.name.toLowerCase().includes(recipeIng.name.toLowerCase()) ||
-          recipeIng.name.toLowerCase().includes(p.name.toLowerCase())
-        );
-        const cost = priceInfo ? missingQty * predictPrice(priceInfo, new Date(), ipcData) : 0;
+        const priceInfo = priceData.find(p => matchNameLocal(p.name, recipeIng.name));
+        const cost = priceInfo ? missingQtyInKg * predictPriceLocal(priceInfo, new Date(), ipcData) : 0;
 
         return {
           name: recipeIng.name,
@@ -263,7 +455,36 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
       unit: string;
       cost: number;
     }>;
-  }, [generatedRecipe, dailyInventory, targetPeople, priceData, ipcData]);
+  }, [generatedRecipe, dailyInventory, totalInventory, targetPeople, priceData, ipcData]);
+
+  // Función para agregar faltantes al inventario total (llamada manualmente)
+  const addMissingToInventory = () => {
+    if (calculateMissingItems.length > 0) {
+      calculateMissingItems.forEach(missingItem => {
+        // Verificar si el ingrediente ya existe en el inventario total
+        const existingItem = totalInventory.find(item => 
+          matchIngredientName(item.name, missingItem.name)
+        );
+
+        if (existingItem) {
+          // Si existe, actualizar la cantidad (agregar el faltante)
+          setTotalInventory(prev => prev.map(item =>
+            item.id === existingItem.id
+              ? { ...item, quantity: item.quantity + missingItem.missing }
+              : item
+          ));
+        } else {
+          // Si no existe, agregarlo al inventario total
+          setTotalInventory(prev => [...prev, {
+            id: Date.now().toString() + Math.random(),
+            name: missingItem.name,
+            quantity: missingItem.missing,
+            unit: missingItem.unit
+          }]);
+        }
+      });
+    }
+  };
 
   const handleGenerateRecipe = async () => {
     const inventoryToUse = dailyInventory.length > 0 
@@ -322,7 +543,7 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
   }, [calculateMissingItems]);
 
   // Estado para inputs de nuevos productos por olla
-  const [newProductsInputs, setNewProductsInputs] = useState<Record<string, { deficit: string; surplus: string }>>({});
+  const [newProductsInputs, setNewProductsInputs] = useState<Record<string, { product: string; type: 'deficit' | 'surplus' | null }>>({});
 
   // Funciones mejoradas para gestionar faltantes y sobrantes
   const addOllaItem = (ollaId: string, type: 'surplus' | 'deficit', product: string, quantity: number = 0) => {
@@ -438,15 +659,18 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
 
   // Optimización con programación lineal
   const optimizationResult = useMemo(() => {
-    if (!generatedRecipe || dailyInventory.length === 0) return null;
+    if (!generatedRecipe) return null;
 
     try {
-      const inventoryToUse = dailyInventory.map(di => ({
+      // Usar inventario diario si existe, sino usar inventario total
+      const inventoryToUse = (dailyInventory.length > 0 ? dailyInventory : totalInventory).map(di => ({
         id: di.id,
         name: di.name,
         quantity: di.quantity,
         unit: di.unit
       }));
+
+      if (inventoryToUse.length === 0) return null;
 
       return optimizeSingleRecipe(
         generatedRecipe,
@@ -459,7 +683,7 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
       console.error('Error en optimización:', error);
       return null; // Retornar null en caso de error para no romper la UI
     }
-  }, [generatedRecipe, dailyInventory, priceData, ipcData, targetPeople]);
+  }, [generatedRecipe, dailyInventory, totalInventory, priceData, ipcData, targetPeople]);
 
   return (
     <div className="space-y-6">
@@ -637,6 +861,205 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
         </Card>
       </div>
 
+      {/* Inventario por Olla - Faltantes y Sobrantes */}
+      {ollaStatuses && ollaStatuses.length > 0 && (
+        <Card>
+          <div className="flex items-center gap-2 mb-6">
+            <MapPin className="text-[#f7931e]" size={24} strokeWidth={2} />
+            <h2 className="text-2xl font-bold text-gray-900">Inventario por Olla Común</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {ollaStatuses.map((status) => {
+              const newProductInput = newProductsInputs[status.ollaId]?.product || '';
+              const selectedType = newProductsInputs[status.ollaId]?.type || null;
+              
+              // Combinar todos los productos con validación
+              const deficitList = Array.isArray(status.deficit) ? status.deficit : [];
+              const surplusList = Array.isArray(status.surplus) ? status.surplus : [];
+              
+              const allProducts = [
+                ...deficitList.filter(d => d && d.product && d.quantity > 0).map(d => ({ ...d, type: 'deficit' as const })),
+                ...surplusList.filter(s => s && s.product && s.quantity > 0).map(s => ({ ...s, type: 'surplus' as const }))
+              ];
+              
+              return (
+                <div key={status.ollaId} className="bg-gradient-to-br from-gray-50 to-white rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <MapPin size={14} className="text-[#f7931e]" />
+                    <span className="truncate">{status.ollaName}</span>
+                  </h4>
+                  
+                  {/* Lista de productos */}
+                  {allProducts.length > 0 && (
+                    <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                      {allProducts.map((item, idx) => {
+                        if (!item || !item.product) return null;
+                        
+                        return (
+                          <div 
+                            key={`${item.type}-${idx}-${item.product}`} 
+                            className={`flex items-center gap-2 p-2 rounded-lg text-xs ${
+                              item.type === 'deficit' 
+                                ? 'bg-red-50 border border-red-100' 
+                                : 'bg-green-50 border border-green-100'
+                            }`}
+                          >
+                            <input
+                              type="number"
+                              value={item.quantity || ''}
+                              onChange={(e) => {
+                                try {
+                                  const qty = parseFloat(e.target.value) || 0;
+                                  if (qty > 0) {
+                                    updateOllaItem(status.ollaId, item.type, item.product, qty);
+                                  }
+                                } catch (e) {
+                                  console.warn('Error al actualizar cantidad:', e);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                try {
+                                  const qty = parseFloat(e.target.value) || 0;
+                                  if (qty === 0) {
+                                    removeOllaItem(status.ollaId, item.type, item.product);
+                                  }
+                                } catch (e) {
+                                  console.warn('Error al procesar blur:', e);
+                                }
+                              }}
+                              min="0"
+                              step="0.1"
+                              placeholder="0"
+                              className={`w-16 p-1.5 border rounded text-xs font-medium ${
+                                item.type === 'deficit' 
+                                  ? 'border-red-200 bg-white focus:ring-red-300' 
+                                  : 'border-green-200 bg-white focus:ring-green-300'
+                              } focus:ring-2`}
+                            />
+                            <span className="flex-1 capitalize text-gray-700 font-medium truncate">
+                              {item.product}
+                            </span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-semibold whitespace-nowrap ${
+                              item.type === 'deficit'
+                                ? 'bg-red-200 text-red-700'
+                                : 'bg-green-200 text-green-700'
+                            }`}>
+                              {item.type === 'deficit' ? 'Falta' : 'Sobra'}
+                            </span>
+                            <button
+                              onClick={() => {
+                                try {
+                                  removeOllaItem(status.ollaId, item.type, item.product);
+                                } catch (e) {
+                                  console.warn('Error al eliminar item:', e);
+                                }
+                              }}
+                              className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                              title="Eliminar"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
+                  {/* Input para agregar */}
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={newProductInput}
+                      onChange={(e) => setNewProductsInputs(prev => ({
+                        ...prev,
+                        [status.ollaId]: { 
+                          ...prev[status.ollaId], 
+                          product: e.target.value,
+                          type: prev[status.ollaId]?.type || null
+                        }
+                      }))}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && newProductInput.trim()) {
+                          const typeToUse = selectedType || 'deficit';
+                          addOllaItem(status.ollaId, typeToUse, newProductInput.trim());
+                          setNewProductsInputs(prev => ({
+                            ...prev,
+                            [status.ollaId]: { product: '', type: null }
+                          }));
+                        }
+                      }}
+                      placeholder="Escribe el producto..."
+                      className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e]"
+                    />
+                    
+                    {/* Botones */}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newProductInput.trim()) {
+                            addOllaItem(status.ollaId, 'deficit', newProductInput.trim());
+                            setNewProductsInputs(prev => ({
+                              ...prev,
+                              [status.ollaId]: { product: '', type: null }
+                            }));
+                          } else {
+                            setNewProductsInputs(prev => ({
+                              ...prev,
+                              [status.ollaId]: { 
+                                ...prev[status.ollaId], 
+                                type: prev[status.ollaId]?.type === 'deficit' ? null : 'deficit'
+                              }
+                            }));
+                          }
+                        }}
+                        className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                          selectedType === 'deficit'
+                            ? 'bg-red-500 text-white shadow-md hover:bg-red-600'
+                            : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
+                        }`}
+                      >
+                        <AlertCircle size={12} />
+                        Falta
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newProductInput.trim()) {
+                            addOllaItem(status.ollaId, 'surplus', newProductInput.trim());
+                            setNewProductsInputs(prev => ({
+                              ...prev,
+                              [status.ollaId]: { product: '', type: null }
+                            }));
+                          } else {
+                            setNewProductsInputs(prev => ({
+                              ...prev,
+                              [status.ollaId]: { 
+                                ...prev[status.ollaId], 
+                                type: prev[status.ollaId]?.type === 'surplus' ? null : 'surplus'
+                              }
+                            }));
+                          }
+                        }}
+                        className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1 ${
+                          selectedType === 'surplus'
+                            ? 'bg-green-500 text-white shadow-md hover:bg-green-600'
+                            : 'bg-green-50 text-green-600 border border-green-200 hover:bg-green-100'
+                        }`}
+                      >
+                        <TrendingUp size={12} />
+                        Sobra
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Configuración de Receta */}
       <Card>
         <div className="flex items-center gap-3 mb-6">
@@ -705,7 +1128,9 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <p className="text-sm text-blue-600 font-medium mb-1">Con el inventario diario alcanza para:</p>
+              <p className="text-sm text-blue-600 font-medium mb-1">
+                Con el inventario {dailyInventory.length > 0 ? 'diario' : 'total'} alcanza para:
+              </p>
               <p className="text-2xl font-bold text-blue-900">{calculatePeopleCapacity || 0} personas</p>
             </div>
             <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
@@ -716,10 +1141,20 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
 
           {calculateMissingItems.length > 0 && (
             <div className="bg-red-50 p-4 rounded-lg border border-red-200 mb-4">
-              <h4 className="font-bold text-red-900 mb-3 flex items-center gap-2">
-                <ShoppingCart size={20} />
-                Necesitas comprar:
-              </h4>
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="font-bold text-red-900 flex items-center gap-2">
+                  <ShoppingCart size={20} />
+                  Necesitas comprar:
+                </h4>
+                <button
+                  onClick={addMissingToInventory}
+                  className="text-xs bg-[#f7931e] hover:bg-[#ff9f3a] text-white px-3 py-1 rounded-lg transition-all flex items-center gap-1"
+                  title="Agregar faltantes al inventario total"
+                >
+                  <Plus size={14} />
+                  Agregar al Inventario
+                </button>
+              </div>
               <ul className="space-y-2">
                 {calculateMissingItems.map((item, i) => (
                   <li key={i} className="flex justify-between items-center text-red-800">
@@ -871,15 +1306,65 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
               <ul className="space-y-2">
                 {generatedRecipe.ingredients.map((ing, i) => {
                   const hasSubstitutes = substitutes[ing.name] && substitutes[ing.name].length > 0;
+                  const inventoryToUse = dailyInventory.length > 0 ? dailyInventory : totalInventory;
+                  const inventoryItem = findInventoryItem(ing.name, inventoryToUse);
+                  const isInInventory = !!inventoryItem;
+                  
+                  // Calcular cantidades
+                  const requiredQty = ing.quantity;
+                  const availableQty = inventoryItem ? inventoryItem.quantity : 0;
+                  const requiredQtyInKg = normalizeToKg(requiredQty, ing.unit);
+                  const availableQtyInKg = inventoryItem ? normalizeToKg(availableQty, inventoryItem.unit) : 0;
+                  const hasEnough = availableQtyInKg >= requiredQtyInKg;
+                  
                   return (
-                    <li key={i} className="flex items-start gap-2 text-gray-700 bg-gray-50 p-3 rounded-lg">
-                      <span className="text-[#f7931e] font-bold mt-0.5">•</span>
+                    <li key={i} className={`flex items-start gap-2 p-3 rounded-lg border-2 ${
+                      isInInventory 
+                        ? hasEnough 
+                          ? 'bg-green-50 border-green-200' 
+                          : 'bg-yellow-50 border-yellow-200'
+                        : 'bg-red-50 border-red-200'
+                    }`}>
+                      <div className="flex-shrink-0 mt-0.5">
+                        {isInInventory ? (
+                          hasEnough ? (
+                            <span className="text-green-600 font-bold">✓</span>
+                          ) : (
+                            <AlertCircle size={18} className="text-yellow-600" />
+                          )
+                        ) : (
+                          <AlertCircle size={18} className="text-red-600" />
+                        )}
+                      </div>
                       <div className="flex-1">
-                        <span><strong>{ing.quantity} {ing.unit}</strong> de {ing.name}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-gray-800">
+                            <strong>{ing.quantity} {ing.unit}</strong> de {ing.name}
+                          </span>
+                          {isInInventory && (
+                            <span className={`text-xs px-2 py-1 rounded font-medium ${
+                              hasEnough 
+                                ? 'bg-green-200 text-green-800' 
+                                : 'bg-yellow-200 text-yellow-800'
+                            }`}>
+                              {hasEnough ? '✓ Disponible' : `⚠ Tienes ${availableQty.toFixed(2)} ${inventoryItem.unit}, necesitas ${requiredQty.toFixed(2)} ${ing.unit}`}
+                            </span>
+                          )}
+                          {!isInInventory && (
+                            <span className="text-xs px-2 py-1 rounded font-medium bg-red-200 text-red-800">
+                              ✗ No está en tu inventario
+                            </span>
+                          )}
+                        </div>
+                        {isInInventory && !hasEnough && (
+                          <p className="text-xs text-yellow-700 mt-1">
+                            Faltan: {(requiredQtyInKg - availableQtyInKg).toFixed(2)} kg
+                          </p>
+                        )}
                         {!hasSubstitutes && (
                           <button
                             onClick={() => handleGetSubstitutes(ing.name)}
-                            className="ml-3 text-xs text-[#f7931e] hover:underline"
+                            className="mt-2 text-xs text-[#f7931e] hover:underline"
                           >
                             {isLoadingSubstitutes === ing.name ? 'Cargando...' : 'Ver sustitutos'}
                           </button>

@@ -371,21 +371,40 @@ export const optimizeSingleRecipe = (
   let minMultiplier = Infinity;
   const missingIngredients: Array<{ name: string; quantity: number; unit: string; cost: number }> = [];
 
+  // Función helper para comparar nombres de ingredientes de forma flexible
+  const matchIngredientName = (name1: string, name2: string): boolean => {
+    const n1 = name1.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const n2 = name2.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    
+    // Comparación exacta
+    if (n1 === n2) return true;
+    
+    // Una contiene a la otra
+    if (n1.includes(n2) || n2.includes(n1)) return true;
+    
+    // Comparar palabras clave comunes
+    const keywords1 = n1.split(/\s+/).filter(w => w.length > 2);
+    const keywords2 = n2.split(/\s+/).filter(w => w.length > 2);
+    
+    // Si comparten al menos una palabra clave significativa
+    return keywords1.some(k1 => keywords2.some(k2 => k1 === k2 || k1.includes(k2) || k2.includes(k1)));
+  };
+
   recipe.ingredients.forEach(ing => {
-    const ingKey = ing.name.toLowerCase().trim();
     const requiredQtyPerServing = normalizeToKg(ing.quantity, ing.unit);
     
     const inventoryItem = availableInventory.find(item => 
-      item.name.toLowerCase().trim() === ingKey ||
-      ingKey.includes(item.name.toLowerCase().trim()) ||
-      item.name.toLowerCase().trim().includes(ingKey)
+      matchIngredientName(item.name, ing.name)
     );
     
     if (inventoryItem) {
       const availableQty = normalizeToKg(inventoryItem.quantity, inventoryItem.unit);
-      const multiplier = availableQty / requiredQtyPerServing;
-      minMultiplier = Math.min(minMultiplier, multiplier);
+      if (requiredQtyPerServing > 0) {
+        const multiplier = availableQty / requiredQtyPerServing;
+        minMultiplier = Math.min(minMultiplier, multiplier);
+      }
     } else {
+      // Si no encontramos el ingrediente, no podemos hacer la receta
       minMultiplier = 0;
     }
   });
@@ -399,12 +418,9 @@ export const optimizeSingleRecipe = (
   
   recipe.ingredients.forEach(ing => {
     const requiredQty = normalizeToKg(ing.quantity, ing.unit) * targetMultiplier;
-    const ingKey = ing.name.toLowerCase().trim();
     
     const inventoryItem = availableInventory.find(item => 
-      item.name.toLowerCase().trim() === ingKey ||
-      ingKey.includes(item.name.toLowerCase().trim()) ||
-      item.name.toLowerCase().trim().includes(ingKey)
+      matchIngredientName(item.name, ing.name)
     );
     
     const availableQty = inventoryItem ? normalizeToKg(inventoryItem.quantity, inventoryItem.unit) : 0;
