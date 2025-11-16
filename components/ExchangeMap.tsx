@@ -160,20 +160,31 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
         }
     }, [localInventoryStatuses]);
     
-    // Sincronizar con estado compartido cuando cambia (solo si viene de fuera)
+    // Sincronizar con estado compartido cuando cambia (detecta cambios en contenido)
     useEffect(() => {
         if (ollaInventoryStatuses.length > 0) {
             try {
-                // Comparar de forma más eficiente
-                const currentIds = localInventoryStatuses.map(s => s.ollaId).sort().join(',');
-                const incomingIds = ollaInventoryStatuses.map(s => s.ollaId).sort().join(',');
+                // Comparar contenido completo para detectar cambios en items
+                const currentStr = JSON.stringify(localInventoryStatuses.map(s => ({
+                    ollaId: s.ollaId,
+                    surplus: s.surplus,
+                    deficit: s.deficit
+                })).sort((a, b) => a.ollaId.localeCompare(b.ollaId)));
                 
-                // Solo actualizar si los IDs son diferentes o si hay cambios significativos
-                if (currentIds !== incomingIds) {
+                const incomingStr = JSON.stringify(ollaInventoryStatuses.map(s => ({
+                    ollaId: s.ollaId,
+                    surplus: s.surplus,
+                    deficit: s.deficit
+                })).sort((a, b) => a.ollaId.localeCompare(b.ollaId)));
+                
+                // Actualizar si hay diferencias en el contenido
+                if (currentStr !== incomingStr) {
                     setLocalInventoryStatuses(ollaInventoryStatuses);
                 }
             } catch (e) {
                 console.warn('Error al sincronizar inventario:', e);
+                // Si hay error, actualizar de todas formas para asegurar sincronización
+                setLocalInventoryStatuses(ollaInventoryStatuses);
             }
         }
     }, [ollaInventoryStatuses]); // Usar el array completo para detectar cambios
@@ -506,23 +517,31 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                 setCalculatedRoute(route);
                 
                 // Obtener inventarios actualizados para todas las ollas de la ruta
+                // Usar ollaInventoryStatuses primero (más actualizado), luego localInventoryStatuses, luego ollas
+                const currentStatuses = ollaInventoryStatuses.length > 0 ? ollaInventoryStatuses : localInventoryStatuses;
+                
                 const routeInventories = route.map(olla => {
-                    const inventoryStatus = localInventoryStatuses.find(s => s.ollaId === olla.id);
+                    const inventoryStatus = currentStatuses.find(s => s.ollaId === olla.id);
                     let surplusList: Array<{ product: string; quantity: number; unit: string }> = [];
                     let deficitList: Array<{ product: string; quantity: number; unit: string }> = [];
                     
                     if (inventoryStatus) {
-                        surplusList = inventoryStatus.surplus.filter(item => item.quantity > 0);
-                        deficitList = inventoryStatus.deficit.filter(item => item.quantity > 0);
+                        // Mostrar todos los items agregados, incluso con quantity 0
+                        surplusList = Array.isArray(inventoryStatus.surplus) 
+                            ? inventoryStatus.surplus.filter(item => item && item.product && item.product.trim() !== '')
+                            : [];
+                        deficitList = Array.isArray(inventoryStatus.deficit) 
+                            ? inventoryStatus.deficit.filter(item => item && item.product && item.product.trim() !== '')
+                            : [];
                     } else {
                         if (Array.isArray(olla.surplus) && olla.surplus.length > 0) {
                             if (typeof olla.surplus[0] === 'object') {
-                                surplusList = (olla.surplus as any[]).filter((s: any) => s.quantity > 0);
+                                surplusList = (olla.surplus as any[]).filter((s: any) => s && s.product && s.product.trim() !== '');
                             }
                         }
                         if (Array.isArray(olla.deficit) && olla.deficit.length > 0) {
                             if (typeof olla.deficit[0] === 'object') {
-                                deficitList = (olla.deficit as any[]).filter((d: any) => d.quantity > 0);
+                                deficitList = (olla.deficit as any[]).filter((d: any) => d && d.product && d.product.trim() !== '');
                             }
                         }
                     }
@@ -594,18 +613,26 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                     description += `<li class="font-semibold text-gray-900">${inventory.ollaName}`;
                     let details: string[] = [];
                     
-                    // Mostrar sobrantes
+                    // Mostrar sobrantes - mostrar todos, incluso con cantidad 0
                     if (inventory.surplus.length > 0) {
-                        const surplusItems = inventory.surplus.map(s => `${s.product} (${s.quantity} ${s.unit})`);
+                        const surplusItems = inventory.surplus.map(s => {
+                            const qty = s.quantity || 0;
+                            const unit = s.unit || 'kg';
+                            return `${s.product} (${qty} ${unit})`;
+                        });
                         details.push(`<div class="flex items-start gap-2 font-normal text-gray-700 p-2 rounded" style="background-color: #fff8ed; border: 1px solid rgba(247, 147, 30, 0.3);">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f7931e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 flex-shrink-0"><path d="m7 11 5-5 5 5"/><path d="M12 18V6"/></svg>
                             <span>Excedente disponible: <span class="font-medium">${surplusItems.join(', ')}</span></span>
                         </div>`);
                     }
                     
-                    // Mostrar faltantes
+                    // Mostrar faltantes - mostrar todos, incluso con cantidad 0
                     if (inventory.deficit.length > 0) {
-                        const deficitItems = inventory.deficit.map(d => `${d.product} (${d.quantity} ${d.unit})`);
+                        const deficitItems = inventory.deficit.map(d => {
+                            const qty = d.quantity || 0;
+                            const unit = d.unit || 'kg';
+                            return `${d.product} (${qty} ${unit})`;
+                        });
                         details.push(`<div class="flex items-start gap-2 font-normal text-gray-700 bg-red-50 p-2 rounded">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-600 mt-0.5 flex-shrink-0"><path d="M12 6v6"/><path d="m7 18 5 5 5-5"/></svg>
                             <span>Necesita: <span class="font-medium">${deficitItems.join(', ')}</span></span>
@@ -1254,8 +1281,13 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                                                 const status = localInventoryStatuses.find(s => s.ollaId === ollaId);
                                                 if (!status) return null;
                                                 
-                                                const deficitList = Array.isArray(status.deficit) ? status.deficit.filter(d => d && d.product && d.quantity > 0) : [];
-                                                const surplusList = Array.isArray(status.surplus) ? status.surplus.filter(s => s && s.product && s.quantity > 0) : [];
+                                                // Mostrar todos los items, incluso con quantity 0 (si fueron agregados manualmente)
+                                                const deficitList = Array.isArray(status.deficit) 
+                                                    ? status.deficit.filter(d => d && d.product && d.product.trim() !== '') 
+                                                    : [];
+                                                const surplusList = Array.isArray(status.surplus) 
+                                                    ? status.surplus.filter(s => s && s.product && s.product.trim() !== '') 
+                                                    : [];
                                                 
                                                 if (deficitList.length === 0 && surplusList.length === 0) return null;
                                                 
@@ -1274,7 +1306,9 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                                                                         <li key={idx} className="text-xs text-red-600 flex items-center gap-1">
                                                                             <span>•</span>
                                                                             <span className="capitalize">{item.product}</span>
-                                                                            <span className="font-medium">({item.quantity} {item.unit})</span>
+                                                                            {item.quantity > 0 && (
+                                                                                <span className="font-medium">({item.quantity} {item.unit || 'kg'})</span>
+                                                                            )}
                                                                         </li>
                                                                     ))}
                                                                 </ul>
@@ -1289,7 +1323,9 @@ const ExchangeMap: React.FC<ExchangeMapProps> = ({
                                                                         <li key={idx} className="text-xs text-green-600 flex items-center gap-1">
                                                                             <span>•</span>
                                                                             <span className="capitalize">{item.product}</span>
-                                                                            <span className="font-medium">({item.quantity} {item.unit})</span>
+                                                                            {item.quantity > 0 && (
+                                                                                <span className="font-medium">({item.quantity} {item.unit || 'kg'})</span>
+                                                                            )}
                                                                         </li>
                                                                     ))}
                                                                 </ul>

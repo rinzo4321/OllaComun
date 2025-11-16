@@ -96,25 +96,78 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
   const [substitutes, setSubstitutes] = useState<Record<string, Substitute[]>>({});
 
   // Estado para faltantes y sobrantes por olla - usar estado compartido si está disponible
-  const [ollaStatuses, setOllaStatuses] = useState<OllaInventoryStatus[]>(
-    ollaInventoryStatuses.length > 0 
-      ? ollaInventoryStatuses 
-      : ollas.map(olla => ({
-          ollaId: olla.id,
-          ollaName: olla.name,
-          surplus: Array.isArray(olla.surplus) && typeof olla.surplus[0] === 'object'
-            ? olla.surplus
-            : olla.surplus.map((s: any) => typeof s === 'string' ? { product: s, quantity: 0, unit: 'kg' } : s),
-          deficit: Array.isArray(olla.deficit) && typeof olla.deficit[0] === 'object'
-            ? olla.deficit
-            : olla.deficit.map((d: any) => typeof d === 'string' ? { product: d, quantity: 0, unit: 'kg' } : d)
-        }))
-  );
+  const [ollaStatuses, setOllaStatuses] = useState<OllaInventoryStatus[]>(() => {
+    if (ollaInventoryStatuses.length > 0) {
+      // Limpiar datos inválidos y duplicados
+      return ollaInventoryStatuses.map(status => ({
+        ...status,
+        surplus: Array.isArray(status.surplus) 
+          ? status.surplus
+              .filter((s: any) => s && s.product && typeof s.product === 'string' && s.product.trim() !== '')
+              .map((s: any) => ({
+                product: s.product.trim(),
+                quantity: typeof s.quantity === 'number' ? s.quantity : 0,
+                unit: s.unit || 'kg'
+              }))
+          : [],
+        deficit: Array.isArray(status.deficit)
+          ? status.deficit
+              .filter((d: any) => d && d.product && typeof d.product === 'string' && d.product.trim() !== '')
+              .map((d: any) => ({
+                product: d.product.trim(),
+                quantity: typeof d.quantity === 'number' ? d.quantity : 0,
+                unit: d.unit || 'kg'
+              }))
+          : []
+      }));
+    }
+    return ollas.map(olla => ({
+      ollaId: olla.id,
+      ollaName: olla.name,
+      surplus: Array.isArray(olla.surplus) && typeof olla.surplus[0] === 'object'
+        ? olla.surplus.filter((s: any) => s && s.product && s.product.trim() !== '')
+        : (Array.isArray(olla.surplus) ? olla.surplus.filter((s: any) => s && typeof s === 'string' && s.trim() !== '').map((s: any) => ({ product: s.trim(), quantity: 0, unit: 'kg' })) : []),
+      deficit: Array.isArray(olla.deficit) && typeof olla.deficit[0] === 'object'
+        ? olla.deficit.filter((d: any) => d && d.product && d.product.trim() !== '')
+        : (Array.isArray(olla.deficit) ? olla.deficit.filter((d: any) => d && typeof d === 'string' && d.trim() !== '').map((d: any) => ({ product: d.trim(), quantity: 0, unit: 'kg' })) : [])
+    }));
+  });
 
   // Sincronizar con el estado compartido cuando cambia
   React.useEffect(() => {
     if (ollaInventoryStatuses.length > 0) {
-      setOllaStatuses(ollaInventoryStatuses);
+      // Limpiar y normalizar datos antes de establecer
+      const cleanedStatuses = ollaInventoryStatuses.map(status => ({
+        ...status,
+        surplus: Array.isArray(status.surplus) 
+          ? status.surplus
+              .filter((s: any) => s && s.product && typeof s.product === 'string' && s.product.trim() !== '')
+              .map((s: any) => ({
+                product: s.product.trim(),
+                quantity: typeof s.quantity === 'number' ? s.quantity : 0,
+                unit: s.unit || 'kg'
+              }))
+          : [],
+        deficit: Array.isArray(status.deficit)
+          ? status.deficit
+              .filter((d: any) => d && d.product && typeof d.product === 'string' && d.product.trim() !== '')
+              .map((d: any) => ({
+                product: d.product.trim(),
+                quantity: typeof d.quantity === 'number' ? d.quantity : 0,
+                unit: d.unit || 'kg'
+              }))
+          : []
+      }));
+      
+      setOllaStatuses(cleanedStatuses);
+      // Asegurar que también se persista en localStorage
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('ollaInventoryStatuses', JSON.stringify(cleanedStatuses));
+        }
+      } catch (e) {
+        console.warn('Error al persistir inventario de ollas desde props:', e);
+      }
     }
   }, [ollaInventoryStatuses]);
 
@@ -547,26 +600,42 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
 
   // Funciones mejoradas para gestionar faltantes y sobrantes
   const addOllaItem = (ollaId: string, type: 'surplus' | 'deficit', product: string, quantity: number = 0) => {
+    const productName = product.trim();
+    if (!productName) return; // No agregar productos vacíos
+    
     setOllaStatuses(prev => {
       const updated = prev.map(status => {
         if (status.ollaId === ollaId) {
           const list = type === 'surplus' ? status.surplus : status.deficit;
-          const existing = list.find(item => item.product.toLowerCase() === product.toLowerCase());
+          // Verificar si ya existe (comparación case-insensitive)
+          const existing = list.find(item => 
+            item && item.product && item.product.toLowerCase().trim() === productName.toLowerCase()
+          );
           
           if (!existing) {
             return {
               ...status,
-              [type]: [...list, { product, quantity, unit: 'kg' }]
+              [type]: [...list, { product: productName, quantity, unit: 'kg' }]
             };
           }
+          // Si ya existe, no hacer nada (evitar duplicados)
         }
         return status;
       });
       
-      // Actualizar estado compartido si está disponible
+      // Actualizar estado compartido si está disponible y persistir inmediatamente
       const updatedStatus = updated.find(s => s.ollaId === ollaId);
       if (updatedStatus && updateOllaInventory) {
         updateOllaInventory(updatedStatus);
+        // Persistir inmediatamente en localStorage
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            const allStatuses = updated;
+            localStorage.setItem('ollaInventoryStatuses', JSON.stringify(allStatuses));
+          }
+        } catch (e) {
+          console.warn('Error al persistir inventario de ollas:', e);
+        }
       }
       
       return updated;
@@ -589,10 +658,19 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
         return status;
       });
       
-      // Actualizar estado compartido si está disponible
+      // Actualizar estado compartido si está disponible y persistir inmediatamente
       const updatedStatus = updated.find(s => s.ollaId === ollaId);
       if (updatedStatus && updateOllaInventory) {
         updateOllaInventory(updatedStatus);
+        // Persistir inmediatamente en localStorage
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            const allStatuses = updated;
+            localStorage.setItem('ollaInventoryStatuses', JSON.stringify(allStatuses));
+          }
+        } catch (e) {
+          console.warn('Error al persistir inventario de ollas:', e);
+        }
       }
       
       return updated;
@@ -611,10 +689,19 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
         return status;
       });
       
-      // Actualizar estado compartido si está disponible
+      // Actualizar estado compartido si está disponible y persistir inmediatamente
       const updatedStatus = updated.find(s => s.ollaId === ollaId);
       if (updatedStatus && updateOllaInventory) {
         updateOllaInventory(updatedStatus);
+        // Persistir inmediatamente en localStorage
+        try {
+          if (typeof window !== 'undefined' && window.localStorage) {
+            const allStatuses = updated;
+            localStorage.setItem('ollaInventoryStatuses', JSON.stringify(allStatuses));
+          }
+        } catch (e) {
+          console.warn('Error al persistir inventario de ollas:', e);
+        }
       }
       
       return updated;
@@ -874,100 +961,143 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
               const newProductInput = newProductsInputs[status.ollaId]?.product || '';
               const selectedType = newProductsInputs[status.ollaId]?.type || null;
               
-              // Combinar todos los productos con validación
-              const deficitList = Array.isArray(status.deficit) ? status.deficit : [];
-              const surplusList = Array.isArray(status.surplus) ? status.surplus : [];
-              
-              const allProducts = [
-                ...deficitList.filter(d => d && d.product && d.quantity > 0).map(d => ({ ...d, type: 'deficit' as const })),
-                ...surplusList.filter(s => s && s.product && s.quantity > 0).map(s => ({ ...s, type: 'surplus' as const }))
-              ];
+              // Separar faltantes y sobrantes - MOSTRAR TODOS, incluso con cantidad 0
+              const deficitList = Array.isArray(status.deficit) 
+                ? status.deficit.filter(d => d && d.product && d.product.trim() !== '')
+                : [];
+              const surplusList = Array.isArray(status.surplus) 
+                ? status.surplus.filter(s => s && s.product && s.product.trim() !== '')
+                : [];
               
               return (
                 <div key={status.ollaId} className="bg-gradient-to-br from-gray-50 to-white rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                  <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
                     <MapPin size={14} className="text-[#f7931e]" />
                     <span className="truncate">{status.ollaName}</span>
                   </h4>
                   
-                  {/* Lista de productos */}
-                  {allProducts.length > 0 && (
-                    <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
-                      {allProducts.map((item, idx) => {
-                        if (!item || !item.product) return null;
-                        
-                        return (
-                          <div 
-                            key={`${item.type}-${idx}-${item.product}`} 
-                            className={`flex items-center gap-2 p-2 rounded-lg text-xs ${
-                              item.type === 'deficit' 
-                                ? 'bg-red-50 border border-red-100' 
-                                : 'bg-green-50 border border-green-100'
-                            }`}
-                          >
-                            <input
-                              type="number"
-                              value={item.quantity || ''}
-                              onChange={(e) => {
-                                try {
-                                  const qty = parseFloat(e.target.value) || 0;
-                                  if (qty > 0) {
-                                    updateOllaItem(status.ollaId, item.type, item.product, qty);
-                                  }
-                                } catch (e) {
-                                  console.warn('Error al actualizar cantidad:', e);
-                                }
-                              }}
-                              onBlur={(e) => {
-                                try {
-                                  const qty = parseFloat(e.target.value) || 0;
-                                  if (qty === 0) {
-                                    removeOllaItem(status.ollaId, item.type, item.product);
-                                  }
-                                } catch (e) {
-                                  console.warn('Error al procesar blur:', e);
-                                }
-                              }}
-                              min="0"
-                              step="0.1"
-                              placeholder="0"
-                              className={`w-16 p-1.5 border rounded text-xs font-medium ${
-                                item.type === 'deficit' 
-                                  ? 'border-red-200 bg-white focus:ring-red-300' 
-                                  : 'border-green-200 bg-white focus:ring-green-300'
-                              } focus:ring-2`}
-                            />
-                            <span className="flex-1 capitalize text-gray-700 font-medium truncate">
-                              {item.product}
-                            </span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded font-semibold whitespace-nowrap ${
-                              item.type === 'deficit'
-                                ? 'bg-red-200 text-red-700'
-                                : 'bg-green-200 text-green-700'
-                            }`}>
-                              {item.type === 'deficit' ? 'Falta' : 'Sobra'}
-                            </span>
-                            <button
-                              onClick={() => {
-                                try {
-                                  removeOllaItem(status.ollaId, item.type, item.product);
-                                } catch (e) {
-                                  console.warn('Error al eliminar item:', e);
-                                }
-                              }}
-                              className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                              title="Eliminar"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        );
-                      })}
+                  {/* FALTANTES */}
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertCircle size={14} className="text-red-500" />
+                      <h5 className="text-xs font-bold text-red-700 uppercase">Faltantes</h5>
                     </div>
-                  )}
+                    {deficitList.length > 0 ? (
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {deficitList.map((item, idx) => {
+                          if (!item || !item.product) return null;
+                          
+                          return (
+                            <div 
+                              key={`deficit-${idx}-${item.product}`} 
+                              className="flex items-center gap-2 p-2 rounded-lg bg-red-50 border border-red-200"
+                            >
+                              <input
+                                type="number"
+                                value={item.quantity || 0}
+                                onChange={(e) => {
+                                  try {
+                                    const qty = parseFloat(e.target.value) || 0;
+                                    updateOllaItem(status.ollaId, 'deficit', item.product, qty);
+                                  } catch (e) {
+                                    console.warn('Error al actualizar cantidad:', e);
+                                  }
+                                }}
+                                min="0"
+                                step="0.1"
+                                placeholder="0"
+                                className="w-20 p-1.5 border border-red-300 rounded text-xs font-semibold bg-white focus:ring-2 focus:ring-red-400 focus:border-red-400"
+                              />
+                              <span className="text-[10px] text-gray-600 font-medium">
+                                {item.unit || 'kg'}
+                              </span>
+                              <span className="flex-1 capitalize text-gray-800 font-semibold text-xs truncate">
+                                {item.product}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  try {
+                                    removeOllaItem(status.ollaId, 'deficit', item.product);
+                                  } catch (e) {
+                                    console.warn('Error al eliminar item:', e);
+                                  }
+                                }}
+                                className="text-red-400 hover:text-red-600 transition-colors p-1"
+                                title="Eliminar"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 italic">No hay faltantes registrados</p>
+                    )}
+                  </div>
                   
-                  {/* Input para agregar */}
-                  <div className="space-y-2">
+                  {/* SOBRANTES */}
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp size={14} className="text-green-500" />
+                      <h5 className="text-xs font-bold text-green-700 uppercase">Sobrantes</h5>
+                    </div>
+                    {surplusList.length > 0 ? (
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {surplusList.map((item, idx) => {
+                          if (!item || !item.product) return null;
+                          
+                          return (
+                            <div 
+                              key={`surplus-${idx}-${item.product}`} 
+                              className="flex items-center gap-2 p-2 rounded-lg bg-green-50 border border-green-200"
+                            >
+                              <input
+                                type="number"
+                                value={item.quantity || 0}
+                                onChange={(e) => {
+                                  try {
+                                    const qty = parseFloat(e.target.value) || 0;
+                                    updateOllaItem(status.ollaId, 'surplus', item.product, qty);
+                                  } catch (e) {
+                                    console.warn('Error al actualizar cantidad:', e);
+                                  }
+                                }}
+                                min="0"
+                                step="0.1"
+                                placeholder="0"
+                                className="w-20 p-1.5 border border-green-300 rounded text-xs font-semibold bg-white focus:ring-2 focus:ring-green-400 focus:border-green-400"
+                              />
+                              <span className="text-[10px] text-gray-600 font-medium">
+                                {item.unit || 'kg'}
+                              </span>
+                              <span className="flex-1 capitalize text-gray-800 font-semibold text-xs truncate">
+                                {item.product}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  try {
+                                    removeOllaItem(status.ollaId, 'surplus', item.product);
+                                  } catch (e) {
+                                    console.warn('Error al eliminar item:', e);
+                                  }
+                                }}
+                                className="text-green-400 hover:text-green-600 transition-colors p-1"
+                                title="Eliminar"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 italic">No hay sobrantes registrados</p>
+                    )}
+                  </div>
+                  
+                  {/* Input para agregar nuevo producto */}
+                  <div className="space-y-2 border-t border-gray-200 pt-3">
                     <input
                       type="text"
                       value={newProductInput}
@@ -980,26 +1110,25 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
                         }
                       }))}
                       onKeyPress={(e) => {
-                        if (e.key === 'Enter' && newProductInput.trim()) {
-                          const typeToUse = selectedType || 'deficit';
-                          addOllaItem(status.ollaId, typeToUse, newProductInput.trim());
+                        if (e.key === 'Enter' && newProductInput.trim() && selectedType) {
+                          addOllaItem(status.ollaId, selectedType, newProductInput.trim(), 0);
                           setNewProductsInputs(prev => ({
                             ...prev,
                             [status.ollaId]: { product: '', type: null }
                           }));
                         }
                       }}
-                      placeholder="Escribe el producto..."
-                      className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e]"
+                      placeholder="Nombre del producto..."
+                      className="w-full p-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-[#f7931e] focus:border-[#f7931e]"
                     />
                     
-                    {/* Botones */}
+                    {/* Botones para seleccionar tipo */}
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => {
                           if (newProductInput.trim()) {
-                            addOllaItem(status.ollaId, 'deficit', newProductInput.trim());
+                            addOllaItem(status.ollaId, 'deficit', newProductInput.trim(), 0);
                             setNewProductsInputs(prev => ({
                               ...prev,
                               [status.ollaId]: { product: '', type: null }
@@ -1021,13 +1150,13 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
                         }`}
                       >
                         <AlertCircle size={12} />
-                        Falta
+                        Agregar Falta
                       </button>
                       <button
                         type="button"
                         onClick={() => {
                           if (newProductInput.trim()) {
-                            addOllaItem(status.ollaId, 'surplus', newProductInput.trim());
+                            addOllaItem(status.ollaId, 'surplus', newProductInput.trim(), 0);
                             setNewProductsInputs(prev => ({
                               ...prev,
                               [status.ollaId]: { product: '', type: null }
@@ -1049,7 +1178,7 @@ const RecipeGenerator: React.FC<RecipeGeneratorProps> = ({
                         }`}
                       >
                         <TrendingUp size={12} />
-                        Sobra
+                        Agregar Sobra
                       </button>
                     </div>
                   </div>
