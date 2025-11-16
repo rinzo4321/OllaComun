@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Olla/Plato circular rojo-naranja -->
+  <circle cx="100" cy="100" r="70" fill="#f7931e" stroke="#e67e22" stroke-width="3"/>
+  
+  <!-- Asa izquierda -->
+  <path d="M 40 90 Q 30 90 30 100 Q 30 110 40 110" stroke="#f7931e" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <circle cx="30" cy="100" r="4" fill="#f7931e"/>
+  
+  <!-- Asa derecha -->
+  <path d="M 160 90 Q 170 90 170 100 Q 170 110 160 110" stroke="#f7931e" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <circle cx="170" cy="100" r="4" fill="#f7931e"/>
+  
+  <!-- Cuchara (blanco, espacio negativo) -->
+  <path d="M 70 60 L 80 70 L 76 100 L 84 104 L 80 110 L 70 100 Z" fill="white" opacity="0.95"/>
+  <ellipse cx="76" cy="64" rx="6" ry="4" fill="white" opacity="0.95"/>
+  
+  <!-- Tenedor (blanco, espacio negativo) -->
+  <path d="M 120 60 L 130 70 L 126 100 L 134 104 L 130 110 L 120 100 Z" fill="white" opacity="0.95"/>
+  <line x1="124" y1="60" x2="124" y2="100" stroke="white" stroke-width="3" opacity="0.95"/>
+  <line x1="128" y1="60" x2="128" y2="100" stroke="white" stroke-width="3" opacity="0.95"/>
+  
+  <!-- Líneas onduladas superior izquierda (vapor/calor) -->
+  <path d="M 30 50 Q 24 46 20 40" stroke="#f7931e" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 36 44 Q 30 40 26 34" stroke="#f7931e" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 42 38 Q 36 34 32 28" stroke="#f7931e" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.7"/>
+  
+  <!-- Líneas onduladas inferior derecha (vapor/calor) -->
+  <path d="M 170 150 Q 176 154 180 160" stroke="#f7931e" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 164 156 Q 170 160 174 166" stroke="#f7931e" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 158 162 Q 164 166 168 172" stroke="#f7931e" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.7"/>
+</svg>
+

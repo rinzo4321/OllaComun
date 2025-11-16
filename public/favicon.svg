@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Olla/Plato circular rojo-naranja vibrante -->
+  <circle cx="50" cy="50" r="38" fill="#f7931e"/>
+  <circle cx="50" cy="50" r="38" fill="url(#potGradient)" opacity="0.8"/>
+  
+  <!-- Gradiente para dar profundidad a la olla -->
+  <defs>
+    <linearGradient id="potGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff9f3a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e67e22;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Asa izquierda redondeada -->
+  <ellipse cx="12" cy="50" rx="4" ry="8" fill="#f7931e"/>
+  <path d="M 16 42 Q 12 42 10 50 Q 12 58 16 58" stroke="#f7931e" stroke-width="4" fill="none" stroke-linecap="round"/>
+  
+  <!-- Asa derecha redondeada -->
+  <ellipse cx="88" cy="50" rx="4" ry="8" fill="#f7931e"/>
+  <path d="M 84 42 Q 88 42 90 50 Q 88 58 84 58" stroke="#f7931e" stroke-width="4" fill="none" stroke-linecap="round"/>
+  
+  <!-- Cuchara (blanco, diagonal) -->
+  <ellipse cx="38" cy="35" rx="4" ry="3" fill="white"/>
+  <path d="M 38 38 L 36 55 L 40 58 L 42 55 Z" fill="white"/>
+  <line x1="36" y1="55" x2="42" y2="55" stroke="#f7931e" stroke-width="1" opacity="0.3"/>
+  
+  <!-- Tenedor (blanco, diagonal, paralelo a la cuchara) -->
+  <path d="M 58 38 L 60 40 L 62 55 L 64 58 L 66 55 L 64 40 Z" fill="white"/>
+  <line x1="62" y1="38" x2="62" y2="55" stroke="white" stroke-width="1.5"/>
+  <line x1="64" y1="38" x2="64" y2="55" stroke="white" stroke-width="1.5"/>
+  <line x1="60" y1="38" x2="60" y2="55" stroke="white" stroke-width="1.5"/>
+  
+  <!-- Líneas onduladas superior izquierda (vapor/calor) - 3 líneas -->
+  <path d="M 12 30 Q 8 28 5 25 Q 2 22 0 18" stroke="#f7931e" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.8"/>
+  <path d="M 15 27 Q 11 25 8 22 Q 5 19 3 15" stroke="#f7931e" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.8"/>
+  <path d="M 18 24 Q 14 22 11 19 Q 8 16 6 12" stroke="#f7931e" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.8"/>
+  
+  <!-- Líneas onduladas inferior derecha (vapor/calor) - 3 líneas -->
+  <path d="M 88 70 Q 92 72 95 75 Q 98 78 100 82" stroke="#f7931e" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.8"/>
+  <path d="M 85 73 Q 89 75 92 78 Q 95 81 97 85" stroke="#f7931e" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.8"/>
+  <path d="M 82 76 Q 86 78 89 81 Q 92 84 94 88" stroke="#f7931e" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.8"/>
+</svg>
+
